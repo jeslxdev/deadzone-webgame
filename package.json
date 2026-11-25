@@ -1,0 +1,23 @@
+{
+  "name": "zona-morta",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zona Morta - RPG de sobrevivência zumbi top-down no navegador (Three.js)",
+  "scripts": {
+    "start": "node server.js",
+    "skin:corinthians": "node scripts/generate-corinthians-skin.cjs"
+  },
+  "dependencies": {
+    "geoip-lite": "^1.4.10",
+    "mysql2": "^3.24.6"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0"
+  },
+  "author": "jeslxdev (https://github.com/jeslxdev)",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeslxdev/deadzone-webgame.git"
+  }
+}

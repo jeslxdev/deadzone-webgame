@@ -1,0 +1,3 @@
+{
+  "_leia": "Coloque aqui modelos .glb gerados no Meshy (rig + animacoes) e registre-os abaixo. Chaves: zombie_<tipo> ou boss_<tipo>. Tipos: andarilho, corredor, brutamontes, cuspidor, explosivo, blindado. Exemplo: \"zombie_andarilho\": { \"file\": \"andarilho.glb\", \"height\": 1.8, \"anims\": { \"idle\": \"Idle\", \"walk\": \"Walking\", \"run\": \"Running\", \"attack\": \"Attack\", \"death\": \"Dying\" } }"
+}

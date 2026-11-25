@@ -1,0 +1,46 @@
+LICENÇA DE AUTORIA — TODOS OS DIREITOS RESERVADOS
+Deadzone / Zona Morta (jogo web)
+
+Copyright (c) 2026 jeslxdev (https://github.com/jeslxdev). Todos os direitos reservados.
+
+Este software, incluindo código-fonte, arte, modelos, sons, textos, nomes,
+mecânicas e demais conteúdos deste repositório (o "Software"), é obra autoral
+protegida pela Lei nº 9.610/1998 (Lei de Direitos Autorais), pela Lei
+nº 9.609/1998 (Lei do Software) e por tratados internacionais.
+
+1. Visualização. É permitido apenas visualizar o código-fonte neste
+   repositório para fins de leitura e estudo pessoal.
+
+2. Proibições. Sem autorização prévia e por escrito do autor, NÃO é permitido:
+   a) copiar, reproduzir ou redistribuir o Software, no todo ou em parte;
+   b) modificar, adaptar, traduzir ou criar obras derivadas;
+   c) publicar, hospedar, executar publicamente ou oferecer o Software como
+      serviço;
+   d) usar o Software, ou partes dele, para fins comerciais;
+   e) remover ou alterar avisos de autoria e de direitos autorais.
+
+3. Contribuições. Qualquer contribuição enviada a este repositório (pull
+   request, issue com código, etc.) pode ser usada pelo autor sem restrições,
+   e o contribuidor declara ter o direito de cedê-la.
+
+4. Componentes de terceiros. Bibliotecas e recursos de terceiros carregados
+   pelo jogo continuam sob suas próprias licenças, por exemplo:
+   - three.js (licença MIT) — https://github.com/mrdoob/three.js
+   - Fontes Black Ops One e Rajdhani via Google Fonts (SIL Open Font License)
+   - Pacotes npm listados em package.json, sob as licenças de cada pacote.
+
+5. Ausência de garantia. O Software é fornecido "no estado em que se
+   encontra", sem garantias de qualquer tipo. Em nenhuma hipótese o autor será
+   responsável por danos decorrentes do uso do Software.
+
+Para pedidos de licenciamento ou autorização, entre em contato com o autor
+pelo GitHub: https://github.com/jeslxdev
+
+---------------------------------------------------------------------------
+AUTHORSHIP LICENSE — ALL RIGHTS RESERVED (English summary)
+
+Copyright (c) 2026 jeslxdev. All rights reserved. You may view the source code
+in this repository for personal study only. Copying, modifying, distributing,
+hosting, publicly running or commercially using this software, in whole or in
+part, requires prior written permission from the author. Third-party
+components remain under their own licenses. Provided "as is", without warranty.

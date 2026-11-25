@@ -1,0 +1,3 @@
+{
+  "_leia": "Sons personalizados (opcional). Coloque arquivos .ogg/.mp3/.wav nesta pasta e liste-os por evento. Use apenas sons que voce tem direito de usar (ex.: pacotes CC0). Eventos: zombie_say, zombie_hurt, zombie_death, player_hurt, sword_hit, step, shot_pistola, shot_smg, shot_escopeta, shot_fuzil, shot_precisao. Exemplo: \"zombie_say\": [\"zumbi1.ogg\", \"zumbi2.ogg\"]"
+}

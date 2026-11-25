@@ -1,0 +1,105 @@
+// ============================================================
+//  ÍCONES — conjunto próprio em SVG (traço 24×24, cor = currentColor)
+//  Uso: icon('granada')  ->  <svg class="ic">…</svg>
+// ============================================================
+const D = {
+  // classes
+  atirador: '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>',
+  samurai: '<path d="M4 20 19 5M20 20 5 5"/><path d="M5 16l3 3M16 19l3-3"/><path d="M19 5l1.5-1.5M5 5 3.5 3.5"/>',
+  // habilidades
+  granada: '<ellipse cx="11" cy="14.5" rx="6" ry="6.5"/><path d="M9 8h4V5.5H9z"/><path d="M13 6.5c2.5-.5 4.5.5 5.5 3"/><circle cx="17.5" cy="4" r="1.5"/><path d="M7.5 13h7M7.5 16.5h7"/>',
+  rajada: '<path d="M13 5h4.5L20 7.5 17.5 10H13zM13 14h4.5l2.5 2.5-2.5 2.5H13z"/><path d="M3 7.5h7M5 12h11M3 16.5h7"/>',
+  investida: '<path d="M21 3 10 14"/><path d="M8 12l4 4M9 15l-2.5 2.5"/><path d="M2 13h4M3 17h3M6 21h3"/>',
+  tempestade: '<path d="M11 12a1 1 0 1 0 2 0 3 3 0 1 0-6 0 5 5 0 1 0 10 0 7 7 0 1 0-14 0"/><path d="M19 12l2-1.5M5 12l-2 1.5"/>',
+  esquiva: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>',
+  // atributos
+  forca: '<path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V10M10 9V6.5a1.5 1.5 0 0 1 3 0V10M13 9.5V7a1.5 1.5 0 0 1 3 0v4M16 10a1.5 1.5 0 0 1 3 0v3c0 4-3 7-7 7h-1c-3 0-5-2-5-5v-2.5A1.5 1.5 0 0 1 7.5 11H10a2 2 0 0 1 0 4H8"/>',
+  agilidade: '<path d="M6 3h5v8l6 2.2c2 .7 3 2 3 3.8v1H4l1-5z"/><path d="M4 21h16"/><path d="M1 7h3M1 10.5h3.5"/>',
+  vitalidade: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"/><path d="M7.5 12h2.2l1.2-2.2 2.2 4.4 1.2-2.2h2.2"/>',
+  precisao: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
+  sorte: '<circle cx="12" cy="8" r="3.2"/><circle cx="8" cy="12" r="3.2"/><circle cx="16" cy="12" r="3.2"/><circle cx="12" cy="16" r="3.2"/><path d="M14 17.5c1 1.5 2.5 3 4.5 3.5"/>',
+  // armas
+  pistola: '<path d="M3 8h15v3h-8l-1 1v1.5L7.2 18H4.2l1.4-5L3 11z"/><path d="M18 9.5h3"/>',
+  smg: '<path d="M2 9h17v3h-8.5v2L9 18H6.2l1-4H2z"/><path d="M19 10.5h3M12 12v4.5h2.2V12"/>',
+  escopeta: '<path d="M2 12.5l4-2.5h16v2.2H9.5l-2 1.3v1.5H3z"/><path d="M10.5 12.2v2.3h5v-2.3"/>',
+  fuzil: '<path d="M2 10.5l3-1.5h15v2.5h-7l-1.2 4H9.4l.6-4H8l-2 3H3l1.5-3z"/><path d="M20 10.2h2M14 9V7h3.5v2"/>',
+  rifle_precisao: '<path d="M1 12.5l4-1.5h17v1.5H10.5l-2 2H3z"/><path d="M8 11V8h8v3M6.5 9.5h1.5M16 9.5h1.5"/>',
+  katana: '<path d="M3 21l4-4"/><path d="M4.8 15.3l3.9 3.9"/><path d="M7.4 16.6Q15 11 21 3q-3 9-12 15.3z"/>',
+  wakizashi: '<path d="M3 21l3-3M4 16.5l3.5 3.5M6.2 17.8Q12 13 15 8q-1 6-7 11.4z"/><path d="M21 21l-3-3M20 16.5 16.5 20M17.8 17.8Q12 13 9 8q1 6 7 11.4z"/>',
+  faca: '<path d="M3 21l4-4M5 15.2l3.8 3.8"/><path d="M7.4 16.6 17.5 6.5c2-2 4.5-1.2 3.4 1.2L11.2 18.5z"/>',
+  nodachi: '<path d="M2 22l3-3M3.2 17.2l3.6 3.6M5.4 18.6Q15 11 22 1.5q-4 11-15 18.6z"/>',
+  naginata: '<path d="M3 21 15 9"/><path d="M15 9q3-6 7-7-1 5-6 8.2z"/><path d="M13.3 7.8l2.9 2.9"/>',
+  // itens de valor
+  sucata: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  enlatado: '<ellipse cx="12" cy="6" rx="6" ry="2"/><path d="M6 6v12c0 1.1 2.7 2 6 2s6-.9 6-2V6"/><path d="M6 10.5c0 1.1 2.7 2 6 2s6-.9 6-2"/>',
+  bateria: '<rect x="3.5" y="7" width="15.5" height="10" rx="1.5"/><path d="M19 10h2v4h-2M7 12h3.5M8.75 10.25v3.5M13 12h3"/>',
+  fita: '<rect x="3" y="9" width="18" height="11" rx="1.5"/><path d="M9 9V6h6v3M3 13h18M10 13v2h4v-2"/>',
+  combustivel: '<path d="M6 5h8l4 4v11H6z"/><path d="M14 5l4 4M9 3h3v2M9 11l6 6M15 11l-6 6"/>',
+  dinheiro: '<rect x="2.5" y="6.5" width="19" height="11" rx="1.5"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v5M18 9.5v5"/>',
+  eletronico: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"/>',
+  remedios: '<rect x="3" y="9" width="18" height="6.5" rx="3.25" transform="rotate(-45 12 12.25)"/><path d="M9.7 9.9l4.6 4.6"/>',
+  relogio: '<circle cx="12" cy="12" r="5.5"/><path d="M12 9.5V12l1.8 1.2"/><path d="M9 6.8 9.5 3h5l.5 3.8M9 17.2l.5 3.8h5l.5-3.8"/>',
+  joia: '<path d="M6 4h12l3 5-9 11L3 9z"/><path d="M3 9h18M9 4 7.5 9 12 20l4.5-11L15 4"/>',
+  documentos: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><path d="M8 12.5h8M8 15.5h5"/>',
+  barra: '<path d="M2 19.5 4.5 14h7l2.5 5.5zM10 19.5l2.5-5.5h7l2.5 5.5z"/><path d="M6 14l2.5-5.5h7L18 14"/>',
+  amostra: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.4 15h9.2"/><circle cx="11" cy="17.5" r=".8" fill="currentColor"/><circle cx="14" cy="18.5" r=".6" fill="currentColor"/>',
+  // consumíveis
+  bandagem: '<rect x="2" y="8.25" width="20" height="7.5" rx="3.75" transform="rotate(-45 12 12)"/><rect x="9.5" y="9.5" width="5" height="5" transform="rotate(-45 12 12)"/>',
+  medkit: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M12 10.5v6M9 13.5h6"/>',
+  // mercado / loot
+  caixa_armas: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10M7.5 5l9 4"/>',
+  caixa_elite: '<rect x="3" y="9" width="18" height="5"/><path d="M5 14v7h14v-7M12 9v12"/><path d="M12 9c-1.5-4-6-4.5-6-1.8S10 9 12 9c2 0 6 .9 6-1.8S13.5 5 12 9z"/>',
+  loot: '<path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',
+  // interface
+  mochila: '<path d="M7 8a5 5 0 0 1 10 0v11a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/><path d="M10 4.5V3h4v1.5M7 12h10M10 12v3h4v-3"/>',
+  moeda: '<circle cx="12" cy="12" r="8.5"/><path d="M14.5 9h-3.2a1.75 1.75 0 0 0 0 3.5h1.4a1.75 1.75 0 0 1 0 3.5H9.5M12 7.5V9M12 16v1.5"/>',
+  caveira: '<path d="M12 3a8 8 0 0 0-8 8c0 2.7 1.3 4.5 3 5.5V20h10v-3.5c1.7-1 3-2.8 3-5.5a8 8 0 0 0-8-8z"/><circle cx="9" cy="11.5" r="1.8" fill="currentColor"/><circle cx="15" cy="11.5" r="1.8" fill="currentColor"/><path d="M10 20v-2M14 20v-2M12 14l-1 2h2z"/>',
+  mapa: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>',
+  pessoa: '<circle cx="12" cy="7" r="3.5"/><path d="M5 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/>',
+  loja: '<path d="M4 9l1.5-5h13L20 9"/><path d="M4 9a2.67 2.67 0 0 0 5.33 0 2.67 2.67 0 0 0 5.34 0A2.67 2.67 0 0 0 20 9"/><path d="M5 11v9h14v-9M10 20v-5h4v5"/>',
+  ninho: '<path d="M12 6c4 0 6 3 6 7s-3 6-6 6-6-2-6-6 2-7 6-7z"/><path d="M6.5 16l-3 3M17.5 16l3 3M8 7.5 6 4.5M16 7.5l2-3M12 19v2.5"/><circle cx="10" cy="12" r="1" fill="currentColor"/><circle cx="14" cy="11" r="1" fill="currentColor"/>',
+  colmeia: '<path d="M12 3l4 2.3v4.6L12 12 8 9.9V5.3z"/><path d="M8 9.9l4 2.1v4.7l-4 2.3-4-2.3V12zM16 9.9l4 2.1v4.7l-4 2.3-4-2.3"/>',
+  boss: '<path d="M5 3c0 3 1 5 3 6M19 3c0 3-1 5-3 6"/><path d="M12 7a6 6 0 0 0-6 6c0 2 1 3.5 2.5 4.5V21h7v-3.5C17 16.5 18 15 18 13a6 6 0 0 0-6-6z"/><path d="M9 12.5l2 1M15 12.5l-2 1M11 21v-2M13 21v-2"/>',
+  base: '<path d="M12 4 2 20h20z"/><path d="M12 4v16M9 20l3-6 3 6"/>',
+  editar: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+  exportar: '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>',
+  importar: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>',
+  mais: '<path d="M12 5v14M5 12h14"/>',
+  fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
+  check: '<path d="M4 12.5l5 5L20 6.5"/>',
+  cadeado: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5M12 14.5V17"/>',
+  dado: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/>',
+  vida: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"/>',
+  escudo: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  xp: '<path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/>',
+  som: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mudo: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  cidade: '<path d="M3 21V9h5v12M8 21V4h7v17M15 21v-9h6v9M2 21h20"/><path d="M10.5 7h2M10.5 10h2M10.5 13h2M5 12h1M17.5 15h1"/>',
+  suburbio: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5M10 20v-6h4v6"/>',
+  porto: '<circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 10h8M4 13a8 8 0 0 0 16 0M4 13l-1.5 1.5M20 13l1.5 1.5"/>',
+  militar: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8l1.2 2.5 2.8.4-2 1.9.5 2.7-2.5-1.3-2.5 1.3.5-2.7-2-1.9 2.8-.4z"/>',
+  fogueira: '<path d="M12 3c1 3 4 4.5 4 8a4 4 0 0 1-8 0c0-2 1-3 1.5-4 .5 1.5 1.5 2 2.5 2-1-2-1-4 0-6z"/><path d="M4 21l16-4M20 21 4 17"/>',
+  nivel: '<path d="M12 20V4M6 10l6-6 6 6"/>',
+  alerta: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
+  soltar: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  recarregar: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
+  onda: '<path d="M4 18c5-1 9-5 11-12"/><path d="M8 20c5-1 10-6 12-14"/><path d="M15 6l2-3 1 4"/>',
+  sismico: '<path d="M12 3v7M9 7l3 3 3-3"/><path d="M2 20h20M4 20l3-4 2 2 3-5 3 5 2-2 3 4"/>',
+  milcortes: '<path d="M4 4l16 16M20 4 4 20M12 2v20M2 12h20" opacity=".9"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+  furia: '<path d="M12 2c2 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 2-7 1 2 2 3 4 3-1-3-1-5 0-7z"/><path d="M9 16l2-3 2 3 2-3"/>',
+  chumbo: '<path d="M3 12h4"/><path d="M7 12l13-7M7 12l14-1M7 12l14 4M7 12l12 8"/><circle cx="20" cy="5" r="1" fill="currentColor"/><circle cx="21" cy="11" r="1" fill="currentColor"/><circle cx="21" cy="16" r="1" fill="currentColor"/>',
+  mina: '<ellipse cx="12" cy="15" rx="8" ry="3.5"/><path d="M4 15v2c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5v-2"/><path d="M12 11.5V8M10 6l2 2 2-2"/>',
+  perfurante: '<path d="M2 12h20"/><path d="M18 8l4 4-4 4"/><circle cx="8" cy="12" r="2.5"/><circle cx="14" cy="12" r="2.5"/>',
+  torreta: '<rect x="7" y="8" width="8" height="6" rx="1"/><path d="M15 11h7M11 14v2M7 21l4-5 4 5"/><path d="M9 8V6h4v2"/>',
+  chute: '<path d="M6 3h3v7l7 3h3a2 2 0 0 1 2 2v2H9l-3-3z"/><path d="M2 6h2M1 10h3"/>',
+  grito: '<circle cx="9" cy="12" r="5"/><path d="M8 13.5h2"/><path d="M16 8a6 6 0 0 1 0 8M19 5.5a10 10 0 0 1 0 13"/>',
+  adrenalina: '<path d="M4 20 20 4"/><path d="M15 3l6 6M8 12l4 4M3 21l2-2"/><path d="M10 10l4 4"/>',
+  zumbi: '<circle cx="12" cy="7" r="3.5"/><path d="M8.5 13 4 12M15.5 13l4.5-1M9 12.5h6l1 4-2 4.5M9 12.5l-1 4 2 4.5"/><circle cx="10.8" cy="6.5" r=".7" fill="currentColor"/><circle cx="13.5" cy="7" r=".7" fill="currentColor"/>',
+};
+
+export function icon(name, cls = '') {
+  const d = D[name] || D.loot;
+  return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+export const ICON_NAMES = Object.keys(D);

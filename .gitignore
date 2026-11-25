@@ -1,0 +1,15 @@
+# Dados de jogadores (sessões e personagens) — nunca versionar
+data/
+
+# Dependências e pacotes gerados
+node_modules/
+*.tar.gz
+*.zip
+
+# Configurações locais, credenciais e logs
+.claude/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
