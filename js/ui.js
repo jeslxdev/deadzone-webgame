@@ -26,7 +26,7 @@ export function itemCardHtml(item, extra = '') {
     <div class="item-icon" style="color:${i.color}">${icon(i.icon)}</div>
     <div class="item-body">
       <div class="item-name" style="color:${i.color}">${escapeHtml(i.name)}${item.qty > 1 ? ` <span class="qty">×${item.qty}</span>` : ''}</div>
-      <div class="item-sub">${i.rarity}${i.cls ? ' · ' + CLASSES[i.cls].name : ''} · ${i.desc}</div>
+      <div class="item-sub">${i.rarity}${item.kind === 'weapon' ? ' · ' + (WEAPONS[item.base]?.type === 'gun' ? 'Arma de fogo' : 'Lâmina') : ''} · ${i.desc}</div>
     </div>
     <div class="item-val">${fmtMoney(i.value)}</div>
     ${extra}
@@ -104,7 +104,7 @@ export class HUD {
         <b>Controles</b><br>
         WASD mover · Mouse mirar · LMB atacar/combo · RMB ataque pesado<br>
         Q F G V habilidades · Shift dash · Espaço pular · Shift+RMB ou botão do meio: mover até<br>
-        R recarregar · E saquear (segure)<br>
+        R recarregar · X trocar arma (fogo ⇄ lâmina) · E saquear (segure)<br>
         1 bandagem · 2 kit médico · Tab mochila · Y trava câmera · Scroll zoom · M som · Esc pausa
         <div class="dim">(H esconde esta ajuda)</div>
       </div>
@@ -302,14 +302,16 @@ export class HUD {
       <div class="modal-head"><h2>${icon('mochila')} MOCHILA <span class="dim">${g.bag.length}/${g.player.stats.bagSlots}</span></h2><button class="btn sm" data-act="close">Fechar (Tab)</button></div>
       <div class="inv-cols">
         <div class="inv-left">
-          <div class="label">Arma equipada</div>
+          <div class="label">Na mão</div>
           ${itemCardHtml(p.equipped)}
+          <div class="label">Reserva <span class="dim">(X troca)</span></div>
+          ${p.secondary ? itemCardHtml(p.secondary) : '<div class="empty">Sem arma reserva.</div>'}
           <div class="label">Itens da partida · ${fmtMoney(total)} <span class="warn">— perdidos se você morrer. Extraia no acampamento!</span></div>
           <div class="item-list" id="inv-list">
             ${g.bag.length ? g.bag.map((it) => {
-              const canEquip = it.kind === 'weapon' && WEAPONS[it.base].cls === p.cls;
+              const canEquip = it.kind === 'weapon'; // qualquer classe usa arma de fogo e lâmina
               const btns = `<div class="item-actions">
-                ${canEquip ? `<button class="btn sm" data-eq="${it.uid}">Equipar</button>` : ''}
+                ${canEquip ? `<button class="btn sm" data-eq="${it.uid}">Na mão</button><button class="btn sm" data-sec="${it.uid}">Reserva</button>` : ''}
                 ${it.kind === 'consumable' ? `<button class="btn sm" data-use="${it.id}">Usar</button>` : ''}
                 <button class="btn sm ghost" data-drop="${it.uid}">Largar</button></div>`;
               return itemCardHtml(it, btns);
@@ -331,6 +333,17 @@ export class HUD {
       g.bag[i] = p.equipped;
       g.player.equip(w);
       this.refreshWeapon();
+      sfx.reload();
+      this.refreshBag();
+      this.renderInventory();
+    });
+    box.querySelectorAll('[data-sec]').forEach((b) => b.onclick = () => {
+      const i = g.bag.findIndex((x) => x.uid === b.dataset.sec);
+      if (i < 0) return;
+      const w = g.bag[i];
+      if (p.secondary) g.bag[i] = p.secondary; else g.bag.splice(i, 1);
+      p.secondary = w;
+      g.player.refreshHolster();
       sfx.reload();
       this.refreshBag();
       this.renderInventory();

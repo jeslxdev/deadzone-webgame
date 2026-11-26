@@ -174,6 +174,7 @@ export class Menu {
       localStorage.setItem(LAST, p.id);
       const rig = buildHumanoid(p.appearance);
       rig.setWeapon(p.equipped);
+      rig.setHolster(p.secondary);
       rig.root.position.set(2.15, 0, 0.35);
       rig.root.rotation.y = -0.75; // de frente para a câmera, perto do fogo
       this.scene.add(rig.root);

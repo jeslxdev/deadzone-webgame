@@ -960,6 +960,31 @@ export function buildHumanoid(ap, opts = {}) {
         this.weaponL = b2.group; this.handL.add(b2.group);
       }
     },
+    // Arma reserva guardada no corpo: lâmina ou arma longa atravessada nas costas
+    // (cabo/cano sobre o ombro direito), pistola no coldre do quadril direito.
+    // Armas: eixo principal em -Y (ponta/cano), cabo/coronha na origem, topo em +Z.
+    holster: null,
+    setHolster(w) {
+      if (this.holster) { this.holster.parent && this.holster.parent.remove(this.holster); this.holster = null; }
+      if (!w || !WEAPONS[w.base]) return;
+      const built = buildWeapon(w.base, w.rarity);
+      const g = new THREE.Group();
+      g.add(built.group);
+      const W = WEAPONS[w.base], backZ = -(0.2 * 0.7 * Math.max(1, bw * 0.9)) - (zombie ? 0.04 : 0.2);
+      if (W.type === 'gun' && w.base === 'pistola') {
+        g.position.set(-(0.2 * bw + 0.05), 0.16, 0.02); // coldre: cano para baixo, no quadril direito
+        g.rotation.set(0.12, Math.PI / 2, 0.05);
+      } else if (W.type === 'gun') {
+        built.group.rotation.x = Math.PI; // cano para cima (bandoleira)
+        g.position.set(0.12, 0.2, backZ); // coronha no quadril esquerdo, cano sobe até o ombro direito
+        g.rotation.set(0, Math.PI, -0.55);
+      } else {
+        g.position.set(-0.14, 0.72, backZ); // cabo sobre o ombro direito, lâmina desce até o quadril esquerdo
+        g.rotation.set(0, Math.PI, -0.5);
+      }
+      this.torso.add(g);
+      this.holster = g;
+    },
     dispose() {
       mats.forEach((m) => m.dispose());
       modeledHairGeo?.dispose();

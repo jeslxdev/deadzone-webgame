@@ -76,6 +76,7 @@ function newProfile(client) {
   const p = R.createProfile({ name, cls, appearance: sanitizeAppearance(client.appearance) });
   p.id = client.id;
   p.equipped = serverItem({ ...p.equipped, uid: uid() });
+  if (p.secondary) p.secondary = serverItem({ ...p.secondary, uid: uid() });
   p.stash = p.stash.map((it) => serverItem({ ...it, uid: uid() }));
   p.created = Date.now();
   return R.migrateProfile(p);
@@ -135,14 +136,23 @@ function reconcile(old, client, run) {
   };
   (old.stash || []).forEach(addPool);
   if (old.equipped) addPool(old.equipped);
+  if (old.secondary) addPool(old.secondary);
   const oldQty = new Map(poolS);
   if (run) for (const it of run.issued.values()) addPool(it);
 
+  // qualquer classe empunha qualquer arma (fogo ou lâmina); só vale o que é do jogador
   let eq = client.equipped && poolW.get(client.equipped.uid);
-  if (!eq || D.WEAPONS[eq.base].cls !== out.cls) eq = poolW.get(old.equipped?.uid) || old.equipped;
+  if (!eq) eq = poolW.get(old.equipped?.uid) || old.equipped;
   poolW.delete(eq.uid);
   out.equipped = serverItem(eq);
   const used = new Set([eq.uid]);
+  // arma reserva: null = guardada no estoque; ausente (cliente antigo) = mantém a anterior
+  let sec = null;
+  if (client.secondary === undefined) sec = old.secondary && poolW.get(old.secondary.uid);
+  // inválida (não é do jogador / já está na mão): mantém a reserva anterior, sem perdê-la
+  else if (isObj(client.secondary)) sec = poolW.get(client.secondary.uid) || (old.secondary && poolW.get(old.secondary.uid)) || null;
+  if (sec) { poolW.delete(sec.uid); used.add(sec.uid); }
+  out.secondary = sec ? serverItem(sec) : null;
   const stash = [];
   for (const it of Array.isArray(client.stash) ? client.stash.slice(0, 600) : []) {
     if (!isObj(it)) continue;
@@ -426,6 +436,7 @@ function normalize(p) {
   if (!Array.isArray(p.cleared)) p.cleared = [];
   p.level = clampInt(p.level, 1, 999); p.xp = Math.max(0, Number(p.xp) || 0); p.money = Math.max(0, Math.floor(Number(p.money) || 0));
   if (!validItem(p.equipped)) p.equipped = serverItem({ kind: 'weapon', base: D.CLASSES[p.cls].startWeapon, rarity: 0, ilvl: 1 });
+  if (p.secondary && !validItem(p.secondary)) p.secondary = null;
   return fixPoints(p);
 }
 

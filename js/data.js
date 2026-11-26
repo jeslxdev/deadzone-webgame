@@ -10,7 +10,7 @@ export const CLASSES = {
   atirador: {
     id: 'atirador', name: 'Atirador', icon: 'atirador',
     desc: 'Especialista em armas de fogo. Mata à distância e controla hordas com granadas e rajadas.',
-    hp: 100, speed: 6.0, armor: 0, dashCd: 1.3, lifesteal: 0, startWeapon: 'pistola',
+    hp: 100, speed: 6.0, armor: 0, dashCd: 1.3, lifesteal: 0, startWeapon: 'pistola', startSecondary: 'faca',
     skills: {
       q: { name: 'Granada', icon: 'granada', cd: 8, desc: 'Arremessa uma granada no cursor. Dano em área.' },
       f: { name: 'Rajada Tática', icon: 'rajada', cd: 18, desc: 'Por 4s: cadência dobrada e munição infinita.' },
@@ -19,7 +19,7 @@ export const CLASSES = {
   samurai: {
     id: 'samurai', name: 'Samurai', icon: 'samurai',
     desc: 'Mestre das lâminas. Mais resistente, rouba vida a cada golpe e corta hordas de perto.',
-    hp: 140, speed: 6.4, armor: 0.15, dashCd: 0.9, lifesteal: 0.04, startWeapon: 'katana',
+    hp: 140, speed: 6.4, armor: 0.15, dashCd: 0.9, lifesteal: 0.04, startWeapon: 'katana', startSecondary: 'pistola',
     skills: {
       q: { name: 'Investida', icon: 'investida', cd: 6, desc: 'Avança cortando todos no caminho.' },
       f: { name: 'Tempestade de Lâminas', icon: 'tempestade', cd: 16, desc: 'Gira por 2,5s cortando tudo ao redor.' },

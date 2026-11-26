@@ -79,6 +79,7 @@ export class Hub {
     if (this.rig) { this.scene.remove(this.rig.root); this.rig.dispose(); }
     this.rig = buildHumanoid(this.p.appearance);
     this.rig.setWeapon(this.p.equipped);
+    this.rig.setHolster(this.p.secondary);
     this.rig.root.position.set(-2.0, 0, -0.6);
     this.rig.root.rotation.y = 0.35;
     if (!this.fill) {
@@ -234,28 +235,42 @@ export class Hub {
     const vals = p.stash.filter((i) => i.kind === 'valuable');
     const cons = p.stash.filter((i) => i.kind === 'consumable');
     const valTotal = vals.reduce((a, it) => a + itemValue(it), 0);
+    const tipo = (w) => (WEAPONS[w.base].type === 'gun' ? 'arma de fogo' : 'lâmina');
     body.innerHTML = `
-      <div class="label">Arma equipada</div>
-      ${itemCardHtml(p.equipped)}
+      <div class="label">Na mão <span class="dim">— ${tipo(p.equipped)}</span></div>
+      ${itemCardHtml(p.equipped, p.secondary ? '<div class="item-actions"><button class="btn sm" id="ar-swap">⇄ Trocar com a reserva</button></div>' : '')}
+      <div class="label">Reserva <span class="dim">— troque durante a partida com <kbd>X</kbd> (fogo ⇄ lâmina)</span></div>
+      ${p.secondary ? itemCardHtml(p.secondary, '<div class="item-actions"><button class="btn sm ghost" id="ar-unsec">Guardar</button></div>') : '<div class="empty">Sem arma reserva. Equipe uma arma guardada como reserva.</div>'}
       <div class="label">Consumíveis <span class="dim">— ficam no cinto: usáveis em qualquer incursão (teclas 1 e 2)</span></div>
       <div class="item-list">${cons.length ? cons.map((it) => itemCardHtml(it)).join('') : '<div class="empty">Nenhum. Compre no Mercado.</div>'}</div>
       <div class="label">Armas guardadas (${weapons.length})</div>
       <div class="item-list">${weapons.length ? weapons.map((it) => {
-        const can = WEAPONS[it.base].cls === p.cls;
-        return itemCardHtml(it, `<div class="item-actions">${can ? `<button class="btn sm" data-eq="${it.uid}">Equipar</button>` : '<span class="dim sm">outra classe</span>'}<button class="btn sm ghost" data-sell="${it.uid}">Vender</button></div>`);
+        return itemCardHtml(it, `<div class="item-actions"><button class="btn sm" data-eq="${it.uid}">Na mão</button><button class="btn sm" data-sec="${it.uid}">Reserva</button><button class="btn sm ghost" data-sell="${it.uid}">Vender</button></div>`);
       }).join('') : '<div class="empty">Nenhuma arma extra.</div>'}</div>
       <div class="label">Itens de valor · ${fmtMoney(valTotal)} ${vals.length ? '<button class="btn sm" id="sell-all">Vender todos</button>' : ''}</div>
       <div class="item-list">${vals.length ? vals.map((it) => itemCardHtml(it, `<div class="item-actions"><button class="btn sm ghost" data-sell="${it.uid}">Vender</button></div>`)).join('') : '<div class="empty">Traga loot das zonas para vender aqui.</div>'}</div>`;
     const mm = deriveStats(p).moneyMult;
+    const done = () => { saveProfile(p); sfx.reload(); this.buildCharacter(); this.renderUI(); };
     body.querySelectorAll('[data-eq]').forEach((b) => b.onclick = () => {
       const i = p.stash.findIndex((x) => x.uid === b.dataset.eq);
+      if (i < 0) return;
       const w = p.stash[i];
       p.stash[i] = p.equipped;
       p.equipped = w;
-      saveProfile(p); sfx.reload();
-      this.buildCharacter();
-      this.renderUI();
+      done();
     });
+    body.querySelectorAll('[data-sec]').forEach((b) => b.onclick = () => {
+      const i = p.stash.findIndex((x) => x.uid === b.dataset.sec);
+      if (i < 0) return;
+      const w = p.stash[i];
+      if (p.secondary) p.stash[i] = p.secondary; else p.stash.splice(i, 1);
+      p.secondary = w;
+      done();
+    });
+    const sw = body.querySelector('#ar-swap');
+    if (sw) sw.onclick = () => { const w = p.equipped; p.equipped = p.secondary; p.secondary = w; done(); };
+    const un = body.querySelector('#ar-unsec');
+    if (un) un.onclick = () => { p.stash.push(p.secondary); p.secondary = null; done(); };
     // com servidor: a venda acontece lá (o preço e o dinheiro são calculados no servidor)
     const sellOnServer = (uids, all) => auth.sell(p, uids, all)
       .then((r) => { r.total ? (all ? sfx.rare() : sfx.pickup()) : 0; toast(`${all ? 'Vendido: ' : ''}+${fmtMoney(r.total)}`, 'loot'); this.renderUI(); })

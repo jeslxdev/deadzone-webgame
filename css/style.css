@@ -558,3 +558,10 @@ body[data-touch] input, body[data-touch] textarea, body[data-touch] select { fon
   #menu .mm-panel { max-height: 88vh; }
 }
 body[data-touch] #menu .mm-panel { touch-action: pan-y; }
+
+/* Trocar arma (fogo ⇄ lâmina) */
+.t-swap { right: 22px; bottom: 186px; width: 44px; height: 44px; }
+.t-swap i { position: absolute; right: -2px; bottom: -4px; font-style: normal; font-size: 13px; font-weight: 700; color: var(--gold); text-shadow: 0 1px 2px #000; }
+@media (orientation: portrait) {
+  body[data-touch] .t-swap { right: 228px; bottom: 58px; }
+}

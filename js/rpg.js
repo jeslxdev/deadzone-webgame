@@ -119,6 +119,7 @@ export function createProfile({ name, cls, appearance }) {
     attrs: { for: 0, agi: 0, vit: 0, pre: 0, sor: 0 },
     money: 150,
     equipped: makeWeapon(CLASSES[cls].startWeapon, 0, 1),
+    secondary: makeWeapon(CLASSES[cls].startSecondary, 0, 1), // arma reserva (todo personagem usa arma de fogo e lâmina)
     stash: [{ uid: uid(), kind: 'consumable', id: 'bandagem', qty: 3 }],
     cleared: [],
     stats: { kills: 0, bosses: 0, minibosses: 0, nests: 0, runs: 0, deaths: 0, extracted: 0 },
@@ -130,6 +131,9 @@ export function createProfile({ name, cls, appearance }) {
 
 // Garante campos novos em perfis antigos
 export function migrateProfile(p) {
+  // Personagens antigos ganham a arma reserva inicial UMA vez (campo ausente = nunca teve).
+  // Se o jogador vender/guardar a reserva o campo vira null e nada é recriado.
+  if (p.secondary === undefined && CLASSES[p.cls]) p.secondary = { uid: 'sec' + p.id, kind: 'weapon', base: CLASSES[p.cls].startSecondary, rarity: 0, ilvl: 1 };
   if (!p.skills) p.skills = { learned: Object.fromEntries(START_SKILLS[p.cls].map((k) => [k, 1])), slots: [...START_SKILLS[p.cls], null, null] };
   if (p.sp === undefined) p.sp = p.level;
   return p;

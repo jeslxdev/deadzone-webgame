@@ -13,6 +13,7 @@ import { icon } from './icons.js';
 import { el } from './util.js';
 import { initAudio } from './audio.js';
 
+const wIcon = (b) => (b === 'precisao' ? 'rifle_precisao' : b);
 const STICK_R = 58; // raio útil do joystick (px)
 
 export class TouchControls {
@@ -40,7 +41,8 @@ export class TouchControls {
       <button class="t-btn t-dash" data-key="ShiftLeft">${icon('esquiva')}<span class="t-cd"></span></button>
       <button class="t-btn t-jump" data-key="Space">${icon('nivel')}</button>
       ${[0, 1, 2, 3].map(skillBtn).join('')}
-      ${gun ? `<button class="t-btn t-reload" data-key="KeyR">${icon('recarregar')}</button>` : ''}
+      <button class="t-btn t-reload ${gun ? '' : 'hidden'}" data-key="KeyR">${icon('recarregar')}</button>
+      <button class="t-btn t-swap ${p.secondary ? '' : 'hidden'}" data-key="KeyX" aria-label="Trocar arma">${p.secondary ? icon(wIcon(p.secondary.base)) : ''}<i>⇄</i></button>
       <button class="t-btn t-item t-i1" data-key="Digit1">${icon('bandagem')}<span class="t-cnt" id="t-c1"></span></button>
       <button class="t-btn t-item t-i2" data-key="Digit2">${icon('medkit')}<span class="t-cnt" id="t-c2"></span></button>
       <button class="t-btn t-use hidden" data-hold="KeyE">${icon('mochila')}<span>SAQUEAR</span></button>
@@ -155,6 +157,18 @@ export class TouchControls {
     const cd = (btn, t, max) => { const s = btn && btn.querySelector('.t-cd'); if (!s) return; s.style.height = Math.max(0, t / max) * 100 + '%'; btn.classList.toggle('cool', t > 0); };
     this.root.querySelectorAll('.t-skill').forEach((b, i) => { const id = slots[i]; if (id) cd(b, pl.cds[id] || 0, skillCooldown(id, g.profile.skills.learned[id] || 1)); });
     cd(this.root.querySelector('.t-heavy'), pl.heavyCd, pl.isGun ? 0.75 : 1.1);
+    // botões acompanham a arma na mão (troca fogo ⇄ lâmina)
+    const wk = g.profile.equipped.uid + '|' + (g.profile.secondary?.uid || '');
+    if (wk !== this._wk) {
+      this._wk = wk;
+      const atk = this.root.querySelector('.t-attack'), hv = this.root.querySelector('.t-heavy'), sw = this.root.querySelector('.t-swap');
+      atk.querySelector('svg').outerHTML = icon(wIcon(g.profile.equipped.base));
+      hv.querySelector('svg').outerHTML = icon(pl.isGun ? 'chute' : 'sismico');
+      this.root.querySelector('.t-reload').classList.toggle('hidden', !pl.isGun);
+      sw.classList.toggle('hidden', !g.profile.secondary);
+      const old = sw.querySelector('svg'); if (old) old.remove();
+      if (g.profile.secondary) sw.insertAdjacentHTML('afterbegin', icon(wIcon(g.profile.secondary.base)));
+    }
     cd(this.root.querySelector('.t-dash'), pl.dashCd, pl.stats.dashCd);
     // botão de saquear só aparece perto de algo saqueável
     const prompt = g.hud.els['h-prompt'];

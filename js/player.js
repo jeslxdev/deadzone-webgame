@@ -12,6 +12,8 @@ import { addXraySilhouette, markCharacterOrder } from './occlusion.js';
 import { SKILLS, SKILL_KEYS } from './data.js';
 import { castSkill, skillCooldown, areaHit } from './skills.js';
 import { icon } from './icons.js';
+import { itemInfo } from './rpg.js';
+const itemName = (w) => itemInfo(w).name;
 
 // Pulo com física: pico ~1,55 m (alcança teto de carros, barris, sacos de areia, muretas)
 const GRAV = 26, JUMP_V = 9.0;
@@ -49,11 +51,14 @@ export class Player {
     this.attackAnim = 0; this.swingDir = 1; this.recoil = 0;
     this.lastHurt = -99; this.useCd = 0;
     this.walkPh = 0;
+    this.ammoBy = {}; this.swapT = 0; // munição guardada por arma (troca rápida)
     this.gait = newGait();
     this.dead = false;
     this.moveTarget = null;
     this.refreshStats(true);
+    this.refreshHolster();
   }
+  refreshHolster() { this.rig.setHolster(this.profile.secondary); markCharacterOrder(this.rig.root); }
 
   refreshStats(full = false) {
     const prevMax = this.stats ? this.stats.maxHp : 0;
@@ -145,7 +150,7 @@ export class Player {
       rig.body.rotation.x = Math.max(-Math.PI / 2, rig.body.rotation.x - dt * 5);
       return;
     }
-    this.atkCd -= dt; this.dashCd -= dt; this.invuln -= dt; this.useCd -= dt;
+    this.atkCd -= dt; this.dashCd -= dt; this.invuln -= dt; this.useCd -= dt; this.swapT -= dt;
     for (const k in this.cds) this.cds[k] -= dt;
     this.heavyCd -= dt; this.kickT -= dt;
     if (this.rapidT > 0) this.rapidT -= dt;
@@ -242,6 +247,7 @@ export class Player {
       this.vy = JUMP_V; this.airborne = true; this.airT = 0;
       sfx.jump();
     }
+    if (input.pressed('KeyX') && !g.channel) this.swapWeapons();
     if (input.pressed('KeyR') && this.isGun && this.ammo < this.w.mag && this.reloadT <= 0) this.startReload();
     if (input.pressed('Digit1')) this.useConsumable('bandagem');
     if (input.pressed('Digit2')) this.useConsumable('medkit');
@@ -384,6 +390,24 @@ export class Player {
     this.trail.update(dt, base, tip, active, TRAIL[kind] || TRAIL.skill);
   }
   dispose() { this.trail.dispose(); }
+
+  // Troca entre a arma na mão e a reserva (fogo ⇄ lâmina). A reserva fica no corpo.
+  swapWeapons() {
+    const p = this.profile, g = this.game;
+    if (!p.secondary || this.swapT > 0 || this.heavy || this.plunge || this.flurry || this.leap || this.dead) return;
+    if (this.isGun) this.ammoBy[p.equipped.uid] = this.ammo;
+    const next = p.secondary;
+    p.secondary = p.equipped;
+    this.equip(next, false);
+    this.ammo = this.isGun ? (this.ammoBy[next.uid] ?? this.w.mag) : 0;
+    this.reloadT = 0; this.comboStep = 0; this.attackAnim = 0; this.atkKind = null;
+    this.atkCd = Math.max(this.atkCd, 0.22);
+    this.swapT = 0.34;
+    this.refreshHolster();
+    g.hud.refreshWeapon();
+    g.hud.toast(`Arma na mão: <b>${itemName(next)}</b>`, 'dim', 1200);
+    sfx.reload();
+  }
 
   startReload() {
     if (this.reloadT > 0) return;
@@ -607,6 +631,11 @@ export class Player {
       rig.elbowR.rotation.x = -0.6 - 0.25 * m;
       if (rig.weaponL) { rig.armL.rotation.set(-0.35 + s * 0.15 * m, -0.12, 0.05); rig.elbowL.rotation.x = -0.6 - 0.25 * m; }
       else { rig.armL.rotation.set(s * 0.5 * m, 0, 0.08); rig.elbowL.rotation.x = -(0.2 + 0.8 * Math.min(1, speed / 8) * m); }
+    }
+    if (this.swapT > 0) { // troca: mão vai às costas/quadril e volta com a outra arma
+      const r = Math.sin((1 - this.swapT / 0.34) * Math.PI);
+      rig.armR.rotation.set(-2.5 * r, 0.2 * r, -0.35 * r); rig.elbowR.rotation.x = -1.7 * r;
+      rig.torso.rotation.y = -0.25 * r;
     }
     if (this.kickT > 0) { // chute frontal
       const k = Math.sin((1 - this.kickT / 0.32) * Math.PI);
