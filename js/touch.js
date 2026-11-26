@@ -30,6 +30,7 @@ export class TouchControls {
     this.root = el(`<div class="touch-ui" id="touch-ui">
       <div class="t-move" id="t-move"><div class="t-base hidden"><div class="t-knob"></div></div><div class="t-hint">Arraste para andar</div></div>
       <div class="t-top">
+        <button class="t-mini" data-key="KeyB" aria-label="Primeira pessoa">${icon('camera')}</button>
         <button class="t-mini" data-key="Tab">${icon('mochila')}</button>
         <button class="t-mini" data-key="Escape">${icon('fechar')}</button>
         <button class="t-mini" data-act="fs">${icon('exportar')}</button>

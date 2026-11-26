@@ -8,6 +8,7 @@ export class Input {
     this.mx = innerWidth / 2; this.my = innerHeight / 2;
     this.wheel = 0;
     this.aim = { x: 0, z: 0 };
+    this.lookDX = 0; this.lookDY = 0; // deslocamento do mouse no quadro (1ª pessoa)
     this.enabled = true;
     const isTyping = (e) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
     this._kd = (e) => {
@@ -17,7 +18,7 @@ export class Input {
       if (['Space', 'Tab', 'KeyQ', 'KeyF', 'KeyE'].includes(e.code) || e.code.startsWith('Arrow')) e.preventDefault();
     };
     this._ku = (e) => this.keys.delete(e.code);
-    this._mm = (e) => { this.mx = e.clientX; this.my = e.clientY; };
+    this._mm = (e) => { this.mx = e.clientX; this.my = e.clientY; this.lookDX += e.movementX || 0; this.lookDY += e.movementY || 0; };
     this._md = (e) => {
       if (e.target !== canvas && e.target.id !== 'overlay') return;
       this.buttons.add(e.button); this.justClicked.add(e.button);
@@ -39,7 +40,7 @@ export class Input {
   pressed(c) { return this.enabled && this.justPressed.has(c); }
   mouseDown(b) { return this.enabled && this.buttons.has(b); }
   clicked(b) { return this.enabled && this.justClicked.has(b); }
-  endFrame() { this.justPressed.clear(); this.justClicked.clear(); this.wheel = 0; }
+  endFrame() { this.justPressed.clear(); this.justClicked.clear(); this.wheel = 0; this.lookDX = 0; this.lookDY = 0; }
   dispose() {
     removeEventListener('keydown', this._kd);
     removeEventListener('keyup', this._ku);

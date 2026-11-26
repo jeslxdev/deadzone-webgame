@@ -518,13 +518,14 @@ export class HUD {
         ctx.beginPath(); ctx.arc(s[0], s[1], 16 + Math.sin(g.time * 8) * 2, 0, Math.PI * 2); ctx.stroke();
       }
     } else if (!g.uiBlocking) {
+      const mx = g.fps ? innerWidth / 2 : inp.mx, my = g.fps ? innerHeight / 2 : inp.my; // 1ª pessoa: mira no centro
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(inp.mx, inp.my, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, my, 9, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(inp.mx - 14, inp.my); ctx.lineTo(inp.mx - 5, inp.my);
-      ctx.moveTo(inp.mx + 5, inp.my); ctx.lineTo(inp.mx + 14, inp.my);
-      ctx.moveTo(inp.mx, inp.my - 14); ctx.lineTo(inp.mx, inp.my - 5);
-      ctx.moveTo(inp.mx, inp.my + 5); ctx.lineTo(inp.mx, inp.my + 14);
+      ctx.moveTo(mx - 14, my); ctx.lineTo(mx - 5, my);
+      ctx.moveTo(mx + 5, my); ctx.lineTo(mx + 14, my);
+      ctx.moveTo(mx, my - 14); ctx.lineTo(mx, my - 5);
+      ctx.moveTo(mx, my + 5); ctx.lineTo(mx, my + 14);
       ctx.stroke();
     }
   }

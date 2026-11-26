@@ -50,6 +50,78 @@ function splats() {
 }
 const decalGeo = new THREE.PlaneGeometry(1, 1);
 
+// Rachadura no chão (impactos pesados)
+let crackMat = null;
+function crackMaterial() {
+  if (crackMat) return crackMat;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 4, 128, 128, 90);
+  gr.addColorStop(0, 'rgba(15,12,10,0.75)'); gr.addColorStop(1, 'rgba(15,12,10,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = 'rgba(10,8,6,0.95)'; g.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    let a = (i / 9) * Math.PI * 2 + Math.random() * 0.4, x = 128, y = 128, w = 5;
+    g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 7; k++) { a += (Math.random() - 0.5) * 0.7; x += Math.cos(a) * (12 + Math.random() * 10); y += Math.sin(a) * (12 + Math.random() * 10); g.lineWidth = w; g.lineTo(x, y); w = Math.max(1, w * 0.78); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  crackMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  return crackMat;
+}
+
+// ============================================================
+//  Rastro da lâmina: fita que segue a ponta da arma e se desfaz
+//  (estilo hack-and-slash). A forma do rastro mostra o golpe:
+//  diagonal, ascendente, giro, estocada, golpe descendente.
+// ============================================================
+export class SwordTrail {
+  constructor(scene, n = 18, life = 0.16) {
+    this.n = n; this.life = life;
+    this.samples = [];
+    const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3);
+    const idx = [];
+    for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    this.geo.setIndex(idx);
+    this.mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    this.mesh = new THREE.Mesh(this.geo, this.mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 4;
+    this.mesh.visible = false;
+    scene.add(this.mesh);
+    this.scene = scene;
+    this.color = new THREE.Color();
+  }
+  // base/ponta em coordenadas de mundo; active = a lâmina está cortando agora
+  update(dt, base, tip, active, colorHex = 0xdff2ff) {
+    for (const s of this.samples) s.age += dt;
+    while (this.samples.length && this.samples[this.samples.length - 1].age > this.life) this.samples.pop();
+    if (active) {
+      this.samples.unshift({ b: base.clone(), t: tip.clone(), age: 0 });
+      if (this.samples.length > this.n) this.samples.length = this.n;
+    }
+    const m = this.samples.length;
+    this.mesh.visible = m >= 2;
+    if (m < 2) return;
+    this.color.setHex(colorHex);
+    const pos = this.geo.attributes.position.array, col = this.geo.attributes.color.array;
+    for (let i = 0; i < m; i++) {
+      const s = this.samples[i], k = 1 - s.age / this.life, a = Math.max(0, k) ** 1.4;
+      pos.set([s.b.x, s.b.y, s.b.z, s.t.x, s.t.y, s.t.z], i * 6);
+      const cb = a * 0.12, ct = a; // base quase invisível, ponta brilhante
+      col.set([this.color.r * cb, this.color.g * cb, this.color.b * cb, this.color.r * ct, this.color.g * ct, this.color.b * ct], i * 6);
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+    this.geo.setDrawRange(0, (m - 1) * 6);
+  }
+  dispose() { this.scene.remove(this.mesh); this.geo.dispose(); this.mat.dispose(); }
+}
+
 export class Effects {
   constructor(scene) {
     this.scene = scene;
@@ -132,33 +204,62 @@ export class Effects {
     this.fx.push({ mesh, t: 0, life: 0.06, kind: 'fade', base: 0.9 });
   }
 
-  muzzle(x, y, z) {
+  muzzle(x, y, z, size = 1) {
     this.flash.position.set(x, y + 0.3, z);
     this.flash.color.setHex(0xffb060);
-    this.flash.intensity = 8;
+    this.flash.intensity = 8 * Math.min(2, size);
     this.flashT = 0.05;
     const mesh = new THREE.Mesh(sphereGeo, basic(0xffd08a, true, 0.9));
     mesh.position.set(x, y, z);
-    mesh.scale.setScalar(0.18);
+    mesh.scale.setScalar(0.18 * size);
     this.scene.add(mesh);
     this.fx.push({ mesh, t: 0, life: 0.05, kind: 'fade', base: 0.9 });
   }
 
-  slash(x, z, angle, arc, reach, color = 0xe8f4ff) {
+  // Cápsula de munição ejetada para a direita da arma, quica no chão
+  casing(x, y, z, facing, color = 0xc9a24a) {
+    const mesh = new THREE.Mesh(pGeo, basic(color, false, 1));
+    mesh.position.set(x, y, z);
+    const rx = -Math.cos(facing), rz = Math.sin(facing); // direita do personagem
+    const sp = 2.2 + Math.random() * 1.2;
+    this.scene.add(mesh);
+    this.parts.push({ mesh, vx: rx * sp + (Math.random() - 0.5), vy: 2.5 + Math.random() * 1.5, vz: rz * sp + (Math.random() - 0.5), life: 0.9, max: 0.9, s: 0.32, g: 16 });
+  }
+  // Rastro reto de estocada / tiro pesado
+  streak(x, y, z, angle, len, color = 0xffffff, width = 0.12, life = 0.16) {
+    const mesh = new THREE.Mesh(tracerGeo, basic(color, true, 0.95));
+    mesh.position.set(x + Math.sin(angle) * len / 2, y, z + Math.cos(angle) * len / 2);
+    mesh.scale.set(width / 0.05, width / 0.05 * 0.4, len);
+    mesh.rotation.y = angle;
+    this.scene.add(mesh);
+    this.fx.push({ mesh, t: 0, life, kind: 'fade', base: 0.95 });
+  }
+  // Rachadura no chão após impacto pesado (some em alguns segundos)
+  crack(x, z, size = 3) {
+    const mesh = new THREE.Mesh(decalGeo, crackMaterial());
+    mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = Math.random() * 6.28;
+    mesh.position.set(x, 0.03, z);
+    mesh.scale.set(size, size, 1);
+    this.scene.add(mesh);
+    this.fx.push({ mesh, t: 0, life: 3.5, kind: 'fade', base: 1 });
+  }
+  makeTrail() { return new SwordTrail(this.scene); }
+
+  slash(x, z, angle, arc, reach, color = 0xe8f4ff, y = 1.0, strength = 1) {
     const geo = new THREE.RingGeometry(reach * 0.35, reach, 24, 1, 0, arc);
-    const mesh = new THREE.Mesh(geo, basic(color, true, 0.75));
+    const mesh = new THREE.Mesh(geo, basic(color, true, 0.75 * strength));
     mesh.rotation.x = -Math.PI / 2;
     // Ring começa no eixo +X local; após rotação x, ângulo local θ vira direção (cosθ, -sinθ).
     // Direção de mira (sin a, cos a) => θ = a - π/2. Centraliza o arco nela.
     mesh.rotation.z = angle - Math.PI / 2 - arc / 2;
-    mesh.position.set(x, 1.0, z);
+    mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    this.fx.push({ mesh, t: 0, life: 0.16, kind: 'fade', base: 0.75, ownGeo: true, grow: 0.15 });
+    this.fx.push({ mesh, t: 0, life: 0.16, kind: 'fade', base: 0.75 * strength, ownGeo: true, grow: 0.15 });
     const edgeGeo = new THREE.RingGeometry(reach * 0.92, reach * 1.02, 28, 1, 0, arc);
-    const edge = new THREE.Mesh(edgeGeo, basic(0xffffff, true, 0.95));
+    const edge = new THREE.Mesh(edgeGeo, basic(0xffffff, true, 0.95 * Math.min(1, strength * 1.5)));
     edge.rotation.copy(mesh.rotation); edge.position.copy(mesh.position); edge.position.y += 0.02;
     this.scene.add(edge);
-    this.fx.push({ mesh: edge, t: 0, life: 0.11, kind: 'fade', base: 0.95, ownGeo: true, grow: 0.08 });
+    this.fx.push({ mesh: edge, t: 0, life: 0.11, kind: 'fade', base: 0.95 * Math.min(1, strength * 1.5), ownGeo: true, grow: 0.08 });
   }
 
   explosion(x, z, radius, color = 0xff7a2a) {

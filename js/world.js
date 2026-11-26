@@ -1205,11 +1205,13 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     return null;
   }
 
-  // Colisão física (círculo vs colisores)
-  function collide(pos, rad) {
+  // Colisão física (círculo vs colisores). feetY = altura dos pés: objetos mais
+  // baixos que os pés não bloqueiam (o jogador passa por cima ou está sobre eles).
+  function collide(pos, rad, feetY = 0) {
     for (let iter = 0; iter < 2; iter++) {
       for (let k = 0; k < colliders.length; k++) {
         const b = colliders[k];
+        if (b.h <= feetY + 0.02) continue;
         if (pos.x + rad < b.minX || pos.x - rad > b.maxX || pos.z + rad < b.minZ || pos.z - rad > b.maxZ) continue;
         const cx = clamp(pos.x, b.minX, b.maxX), cz = clamp(pos.z, b.minZ, b.maxZ);
         let dx = pos.x - cx, dz = pos.z - cz;
@@ -1224,6 +1226,19 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     }
     pos.x = clamp(pos.x, -half + rad, half - rad);
     pos.z = clamp(pos.z, -half + rad, half - rad);
+  }
+  // Altura do apoio sob os pés: topo do objeto mais alto (que já esteja abaixo dos pés)
+  // sob o centro do personagem. 0 = chão. Permite pousar em carros, caixas, muretas...
+  function supportHeight(x, z, rad, feetY) {
+    const r = rad * 0.55;
+    let top = 0;
+    for (let k = 0; k < colliders.length; k++) {
+      const b = colliders[k];
+      if (b.h > feetY + 0.06 || b.h <= top) continue;
+      if (x + r < b.minX || x - r > b.maxX || z + r < b.minZ || z - r > b.maxZ) continue;
+      top = b.h;
+    }
+    return top;
   }
   function pointBlocked(x, z, y = 1) {
     for (let k = 0; k < colliders.length; k++) {
@@ -1278,17 +1293,18 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
         if (o.geometry && !geoShared(o.geometry)) o.geometry.dispose();
       }
     });
+    for (const f of fires) f.flame.dispose(); // chamas/fogueira (materiais próprios)
     groundTex.dispose(); groundBump.dispose();
     facadeMat.dispose(); plainMat.dispose(); glowMat.dispose();
     for (const b of fadeBuildings) if (b.mesh) b.mesh.material.dispose();
   }
-  const geoShared = (g) => g === sparkleGeo || g === flameGeo || g === wheelGeo || g === carBodyGeo || g === carCabinGeo || g === lightGeo || boxShared(g);
+  const geoShared = (g) => g === sparkleGeo || g === wheelGeo || g === carBodyGeo || g === carCabinGeo || g === lightGeo || boxShared(g);
   const boxShared = (g) => g.type === 'BoxGeometry' && g.parameters && !g.attributes.color;
 
   return {
     seed, size: S, half, group, colliders, containers, nests: nestObjs, mother, safe, extraction,
     types, N, P, ROAD, blockOrigin, GW, CELL, blocked,
-    computeField, flowDir, hasLOS, isBlocked, randomWalkable, walkableNear, collide, pointBlocked,
+    computeField, flowDir, hasLOS, isBlocked, randomWalkable, walkableNear, collide, supportHeight, pointBlocked,
     newField: () => new Uint16Array(GW * GW), cellOf,
     markLooted, addTreasure, update, updateOcclusion, dispose,
   };

@@ -186,7 +186,7 @@ export class Coop {
     return {
       k: 'p', x: r1(p.pos.x), z: r1(p.pos.z), f: Math.round(p.facing * 100) / 100, sp: r1(Math.hypot(p.vel.x, p.vel.z)),
       at: p.netAtk, sd: p.swingDir, sh: p.netShot, hp: Math.round(p.hp), mhp: p.stats.maxHp, lvl: this.g.profile.level,
-      dead: p.dead ? 1 : 0, w: [w.base, w.rarity], spin: p.spinT > 0 ? 1 : 0, ly: r1(p.leapY || 0),
+      dead: p.dead ? 1 : 0, w: [w.base, w.rarity], spin: p.spinT > 0 ? 1 : 0, ly: r1((p.leapY || 0) + (p.y || 0)),
     };
   }
 

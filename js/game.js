@@ -11,7 +11,7 @@ import { Zombie } from './zombies.js';
 import { HUD } from './ui.js';
 import { sfx, initAudio, toggleMute } from './audio.js';
 import { rollLoot, zombieDrop, addToBag, grantXp, saveProfile, mergeInto, itemInfo, randomWeapon, deriveStats } from './rpg.js';
-import { rand, randi, pick, weighted, clamp, uid } from './util.js';
+import { rand, randi, pick, weighted, clamp, uid, angleLerp } from './util.js';
 import { icon } from './icons.js';
 import { setting } from './settings.js';
 import { TouchControls } from './touch.js';
@@ -94,6 +94,7 @@ export class Game {
     this.shakeAmt = 0;
 
     this.cam = { target: this.player.pos.clone(), dist: isTouch ? 27 : 34, pitch: 0.98, locked: true };
+    this.fps = false; this.fpsYaw = 0; this.fpsPitch = 0; // visão em 1ª pessoa (tecla B / rolar até o fim)
     this.raycaster = new THREE.Raycaster();
     this.aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.0);
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -739,7 +740,13 @@ export class Game {
       const h = this.world.half;
       cam.target.x = clamp(cam.target.x, -h, h); cam.target.z = clamp(cam.target.z, -h, h);
     }
-    if (inp.wheel && !this.uiBlocking) cam.dist = clamp(cam.dist + inp.wheel * 2.5, 18, 52);
+    // rolar: aproxima/afasta; no zoom máximo entra em 1ª pessoa, rolar para trás sai
+    if (inp.wheel && !this.uiBlocking) {
+      if (this.fps) { if (inp.wheel > 0) this.setFps(false); }
+      else if (inp.wheel < 0 && cam.dist <= 18.01) this.setFps(true);
+      else cam.dist = clamp(cam.dist + inp.wheel * 2.5, 18, 52);
+    }
+    if (this.fps) { this.updateFpsCamera(dt); return; }
     const c = this.camera;
     // balanço ao andar/correr + leve rolagem + FOV maior em corrida/esquiva
     const run = clamp(Math.hypot(vx, vz) / 8, 0, 1), gt = pl.gait;
@@ -782,6 +789,67 @@ export class Game {
     }
   }
 
+  // ---------- 1ª pessoa ----------
+  setFps(on) {
+    if (on === this.fps || this.player.dead) return;
+    this.fps = on;
+    const pl = this.player, c = this.camera;
+    if (on) {
+      this.fpsYaw = pl.facing; this.fpsPitch = -0.08; c.near = 0.05;
+      this.hud.toast(`${icon('camera')} Primeira pessoa · mouse olha (clique trava o cursor) · B ou rolar para trás para sair`, 'dim');
+      this.requestLook();
+    } else {
+      c.near = 0.5; c.fov = 40;
+      if (document.pointerLockElement) document.exitPointerLock();
+      this.cam.target.copy(pl.pos);
+      this.hud.toast(`${icon('camera')} Visão de cima`, 'dim');
+    }
+    c.updateProjectionMatrix();
+    // a luz de preenchimento (pensada para a câmera de cima) fica colada na lâmina em 1ª pessoa: atenua
+    if (this._plI === undefined) this._plI = this.playerLight.intensity;
+    this.playerLight.intensity = on ? this._plI * 0.2 : this._plI;
+    // a própria cabeça some (a câmera fica nos olhos) e a silhueta de raio-X é desligada
+    pl.rig.head.visible = !on;
+    pl.rig.root.traverse((o) => { if (o.userData.xray) o.visible = !on; });
+  }
+  requestLook() {
+    if (this.touch) return;
+    const el = this.app.renderer.domElement;
+    if (document.pointerLockElement === el) return;
+    try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch {}
+  }
+  updateFpsCamera(dt) {
+    const inp = this.input, pl = this.player, c = this.camera, p = pl.pos;
+    if (!this.uiBlocking) {
+      const sens = 0.0024;
+      this.fpsYaw -= inp.lookDX * sens;
+      this.fpsPitch = clamp(this.fpsPitch - inp.lookDY * sens, -1.2, 1.05);
+      if (inp.key('ArrowLeft')) this.fpsYaw += dt * 2.4;
+      if (inp.key('ArrowRight')) this.fpsYaw -= dt * 2.4;
+      if (inp.key('ArrowUp')) this.fpsPitch = Math.min(1.05, this.fpsPitch + dt * 1.6);
+      if (inp.key('ArrowDown')) this.fpsPitch = Math.max(-1.2, this.fpsPitch - dt * 1.6);
+    }
+    if (this.touch) { // celular: a visão acompanha a mira automática / arrasto do botão de ataque
+      this.touch.applyAim();
+      this.fpsYaw = angleLerp(this.fpsYaw, Math.atan2(inp.aim.x - p.x, inp.aim.z - p.z), Math.min(1, dt * 6));
+    }
+    const fx = Math.sin(this.fpsYaw), fz = Math.cos(this.fpsYaw), cp = Math.cos(this.fpsPitch);
+    if (!this.touch) { inp.aim.x = p.x + fx * 14; inp.aim.z = p.z + fz * 14; }
+    const head = this._headPos || (this._headPos = new THREE.Vector3());
+    pl.rig.head.getWorldPosition(head);
+    c.position.set(head.x + fx * 0.24, head.y + 0.17, head.z + fz * 0.24); // à frente do rosto: ombros e tronco ficam atrás da câmera
+    c.lookAt(c.position.x + fx * cp, c.position.y + Math.sin(this.fpsPitch), c.position.z + fz * cp);
+    const run = clamp(Math.hypot(pl.vel.x, pl.vel.z) / 8, 0, 1);
+    const fov = 72 + 4 * run + (pl.dashT > 0 ? 6 : 0);
+    if (Math.abs(c.fov - fov) > 0.01) { c.fov += (fov - c.fov) * Math.min(1, dt * 6); c.updateProjectionMatrix(); }
+    if (!setting('shake')) this.shakeAmt = 0;
+    if (this.shakeAmt > 0.001) { c.rotateX((Math.random() - 0.5) * this.shakeAmt * 0.05); c.rotateY((Math.random() - 0.5) * this.shakeAmt * 0.05); this.shakeAmt *= Math.exp(-dt * 7); }
+    this.sun.position.set(p.x - 22, 45, p.z + 18);
+    this.sun.target.position.set(p.x, 0, p.z);
+    this.playerLight.position.set(p.x, 3.2, p.z + 0.5);
+    updateOcclusionWindow(c, p, false); // nada fica transparente em 1ª pessoa
+  }
+
   get uiBlocking() { return this.paused || this.invOpen || !!this.ended; }
 
   // ---------- Loop ----------
@@ -792,6 +860,8 @@ export class Game {
       else if (!this.ended) this.hud.togglePause();
     }
     if ((inp.pressed('Tab') || inp.pressed('KeyI')) && !this.ended && !this.paused) this.hud.toggleInventory();
+    if (inp.pressed('KeyB') && !this.uiBlocking) this.setFps(!this.fps);
+    if (this.fps && inp.clicked(0) && !this.uiBlocking && !document.pointerLockElement) this.requestLook();
     if (inp.pressed('KeyM')) this.hud.toast(toggleMute() ? `${icon('mudo')} Som desligado` : `${icon('som')} Som ligado`, 'dim');
     if (inp.clicked(0) || inp.justPressed.size) initAudio();
 
@@ -861,6 +931,8 @@ export class Game {
     this.world.dispose();
     this.input.dispose();
     this.hud.dispose();
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.player.dispose();
     this.player.rig.dispose();
     this.scene.clear();
   }
