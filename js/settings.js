@@ -4,9 +4,10 @@
 import { getVolumes, setVolume, sfx, initAudio } from './audio.js';
 import { icon } from './icons.js';
 import { el } from './util.js';
+import { lowPower } from './device.js';
 
 const KEY = 'zonamorta.settings';
-const defaults = { camBob: true, camLead: true, shake: true, showHelp: true, seeThrough: true };
+const defaults = { camBob: true, camLead: true, shake: true, showHelp: true, seeThrough: true, cinema: !lowPower };
 const state = Object.assign({}, defaults, JSON.parse(localStorage.getItem(KEY) || '{}'));
 export function setting(k) { return state[k]; }
 function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -31,6 +32,8 @@ export function openSettings(onClose) {
       ${check('camLead', 'Câmera antecipa o movimento e a mira')}
       ${check('shake', 'Tremor de tela (impactos/explosões)')}
       ${check('seeThrough', 'Cenário transparente na frente do personagem')}
+      <div class="label">Imagem</div>
+      ${check('cinema', 'Visual cinematográfico (brilho, cor de filme, vinheta) — desligue se o jogo ficar lento')}
       <div class="dim sm">Sons próprios: coloque arquivos em <b>sounds/</b> e registre em sounds/manifest.json.</div>
       <button class="btn" id="set-close">Fechar</button>
     </div>

@@ -27,7 +27,7 @@ export class Creator {
     scene.fog = new THREE.Fog(0x14110f, 8, 22);
     this.camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.1, 100);
     scene.add(new THREE.HemisphereLight(0x8a8aa0, 0x221a14, 1.0));
-    const key = new THREE.SpotLight(0xffd0a0, 60, 20, 0.5, 0.5, 1.2);
+    const key = new THREE.SpotLight(0xffd0a0, 32, 20, 0.5, 0.5, 1.2); // mais suave: pele não estoura com o bloom
     key.position.set(2.5, 6, 4); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
     scene.add(key, key.target);
     const rim = new THREE.PointLight(0x6a9aff, 8, 10); rim.position.set(-2.5, 2.5, -2.5); scene.add(rim);
@@ -226,7 +226,7 @@ export class Creator {
     r.head.rotation.y = Math.sin(this.t * 0.7) * 0.2;
   }
 
-  render() { this.app.renderer.render(this.scene, this.camera); }
+  render() { this.app.draw(this.scene, this.camera); }
 
   resize(w, h) {
     const c = this.camera;

@@ -15,61 +15,12 @@ import { sfx, initAudio } from './audio.js';
 import { icon } from './icons.js';
 import { openSettings } from './settings.js';
 import { net } from './net.js';
+import { buildCampScene } from './camp.js';
 
 const PANEL_W = 560;
 
-// Cena do acampamento (reaproveitada no menu)
-export function buildCampScene() {
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0f0d0c);
-  scene.fog = new THREE.Fog(0x0f0d0c, 10, 34);
-  scene.add(new THREE.HemisphereLight(0x5a5a78, 0x1a1410, 0.7));
-  const moon = new THREE.DirectionalLight(0x8aa0ff, 0.5);
-  moon.position.set(-8, 14, -6);
-  scene.add(moon);
-  const fire = new THREE.PointLight(0xff8a3a, 40, 18, 1.5);
-  fire.position.set(0, 1.2, 0);
-  fire.castShadow = true;
-  fire.shadow.mapSize.set(1024, 1024);
-  scene.add(fire);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x2e2620, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
-  scene.add(ground);
-  const M = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 });
-  const add = (geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; scene.add(m); return m; };
-  // fogueira
-  for (let i = 0; i < 5; i++) { const l = add(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 6), M(0x3a2414), 0, 0.12, 0, (i / 5) * Math.PI); l.rotation.z = Math.PI / 2; }
-  for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; add(new THREE.DodecahedronGeometry(0.18), M(0x555050), Math.cos(a) * 0.65, 0.1, Math.sin(a) * 0.65); }
-  const flame = add(new THREE.ConeGeometry(0.35, 1.1, 8), new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.9 }), 0, 0.6, 0);
-  const flame2 = add(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xffd27a }), 0, 0.45, 0);
-  flame.castShadow = flame2.castShadow = false;
-  // barracas
-  const tent = (x, z, ry, c) => { const g = new THREE.ConeGeometry(1.8, 2.2, 4); const m = add(g, M(c), x, 1.1, z, ry + Math.PI / 4); return m; };
-  tent(-4.5, -3.5, 0.3, 0x4b5a2a); tent(4.8, -4.2, -0.4, 0x5a4a2a); tent(-7, 2, 0.8, 0x3a4a3a);
-  // sacos de areia e caixas
-  for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(1.2, 0.5, 0.6), M(0x8a7a5a), -3 + i * 1.25, 0.25, -7.5, (Math.random() - 0.5) * 0.2);
-  add(new THREE.BoxGeometry(1, 1, 1), M(0x8a6a3a), 3.2, 0.5, 1.8, 0.4);
-  add(new THREE.BoxGeometry(1.6, 0.8, 1), M(0x4b5a2a), 3.6, 0.4, 3.2, -0.2);
-  add(new THREE.CylinderGeometry(0.4, 0.4, 1, 10), M(0x5a3a22), -3.2, 0.5, 2.5);
-  // tronco para sentar
-  const log = add(new THREE.CylinderGeometry(0.3, 0.3, 2.2, 8), M(0x4a3020), -1.8, 0.3, 1.6, 0.6); log.rotation.z = Math.PI / 2;
-  // ruínas ao fundo
-  for (let i = 0; i < 14; i++) {
-    const h = rand(4, 16), w = rand(3, 6);
-    add(new THREE.BoxGeometry(w, h, w), M(0x2a2826), -24 + i * 3.8, h / 2, -18 - rand(0, 6));
-  }
-  let t = 0;
-  return {
-    scene, fire,
-    update(dt) {
-      t += dt;
-      const f = 0.85 + Math.sin(t * 13) * 0.08 + Math.sin(t * 29) * 0.06;
-      fire.intensity = 40 * f;
-      flame.scale.set(f, f * (1 + Math.sin(t * 9) * 0.15), f);
-      flame2.scale.set(f, f, f);
-    },
-  };
-}
+// Cena do acampamento (reaproveitada no menu): js/camp.js
+export { buildCampScene };
 
 export class Hub {
   constructor(app, args = {}) {
@@ -410,7 +361,7 @@ export class Hub {
     r.head.rotation.y = Math.sin(this.t * 0.5) * 0.3;
   }
 
-  render() { this.app.renderer.render(this.scene, this.camera); }
+  render() { this.app.draw(this.scene, this.camera); }
 
   resize(w, h) {
     const c = this.camera;

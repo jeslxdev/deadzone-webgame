@@ -10,6 +10,7 @@ import { mulberry32, rand, randi, pick, weighted, clamp } from './util.js';
 import { mat, box } from './character.js';
 import { addOcclusion } from './occlusion.js';
 import { lowPower } from './device.js';
+import { makeFlames, makeFirePit, asphaltBump } from './camp.js';
 
 const P = 34, ROAD = 8, BLOCK = P - ROAD;
 const CELL = 1;
@@ -250,6 +251,42 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     fadeBuildings.push({ geometry: g, x: cx, z: cz, w, d, h });
     // parapeito e detalhes do telhado
     addPlain(w + 0.3, 0.5, d + 0.3, cx, h + 0.25, cz, 0x3a3836);
+    // Acabamentos de fachada e cobertura: marquises, sacadas e equipamentos
+    // dão escala urbana sem alterar colisão, saque ou navegação.
+    const concrete = darkerHex(color);
+    if (w > 5 && h > 3) {
+      addPlain(w * 0.36, 0.16, 0.72, cx, 2.55, cz + d / 2 + 0.28, pick([0x55453a, 0x414345, 0x69533a], r), { jitter: 0.08 });
+      addPlain(w * 0.38, 0.08, 0.08, cx, 2.42, cz + d / 2 + 0.61, 0x353331, { jitter: 0.04 });
+    }
+    if (w > 7 && h > 7 && r() < 0.58) {
+      const floors = Math.max(1, Math.floor(h / 4.2));
+      const floor = randi(1, floors, r);
+      const bx = cx + rand(-w * 0.22, w * 0.22, r);
+      const by = floor * 3.6;
+      const bz = cz + d / 2 + 0.19;
+      addPlain(w * 0.22, 0.12, 0.48, bx, by, bz, concrete, { jitter: 0.05 });
+      addPlain(w * 0.22, 0.07, 0.08, bx, by + 0.48, bz + 0.23, 0x3a3936, { jitter: 0.04 });
+      for (const dx of [-w * 0.105, w * 0.105]) addPlain(0.07, 0.48, 0.07, bx + dx, by + 0.24, bz + 0.23, 0x494743, { jitter: 0.05 });
+    }
+    if (w > 6 && h > 4) {
+      const units = Math.min(3, Math.floor(w / 5));
+      for (let i = 0; i < units; i++) {
+        if (r() < 0.48) continue;
+        const ux = cx + (i - (units - 1) / 2) * Math.min(2.8, w * 0.25);
+        const uy = rand(2.2, Math.min(h - 1, 6.5), r);
+        const face = new THREE.BoxGeometry(0.82, 0.46, 0.28);
+        addPlain(0, 0, 0, ux, uy, cz + d / 2 + 0.17, 0x77736a, { geo: face, jitter: 0.06 });
+        addPlain(0.58, 0.05, 0.035, ux, uy - 0.13, cz + d / 2 + 0.325, 0x3c4142, { jitter: 0.03 });
+        for (let fin = -2; fin <= 2; fin++) addPlain(0.025, 0.24, 0.025, ux + fin * 0.105, uy, cz + d / 2 + 0.325, 0x393b3a, { jitter: 0.03 });
+      }
+    }
+    if (w > 7 && d > 6 && r() < 0.62) {
+      const tx = cx + rand(-w * 0.3, w * 0.3, r), tz = cz + rand(-d * 0.28, d * 0.28, r);
+      const tank = new THREE.CylinderGeometry(0.48, 0.52, 1.4, 12, 1);
+      addPlain(0, 0, 0, tx, h + 1.0, tz, 0x565a58, { geo: tank, jitter: 0.08 });
+      addPlain(1.08, 0.09, 1.08, tx, h + 1.72, tz, 0x353a39, { jitter: 0.04 });
+      addPlain(0, 0, 0, tx + 0.64, h + 0.55, tz, 0x454745, { geo: new THREE.CylinderGeometry(0.045, 0.045, 0.9, 7), jitter: 0.04 });
+    }
     if (w > 6 && r() < 0.7) addPlain(2, 1.2, 1.6, cx + rand(-w / 4, w / 4, r), h + 0.6, cz + rand(-d / 4, d / 4, r), 0x707070);
     if (h > 8 && r() < 0.48) {
       const tx = cx + rand(-w * 0.28, w * 0.28, r), tz = cz + rand(-d * 0.28, d * 0.28, r);
@@ -557,7 +594,7 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     wallRun(cx - hs, cz + hs, cx + hs, cz + hs, 1.8, 0.6, wc, [[8, 13]], false);
     wallRun(cx + hs, cz - hs, cx + hs, cz + hs, 1.8, 0.6, wc, [[8, 13]], false);
     // fogueira
-    addPlain(0, 0, 0, cx, 0.15, cz, 0x3a2a1a, { geo: new THREE.CylinderGeometry(0.9, 1, 0.3, 10) });
+    // fogueira: montada junto com as chamas (sem colisão, como antes — o jogador nasce aqui)
     tent(cx - 5.5, cz - 5, 4, 3.4, 0x5a6a3a);
     tent(cx + 5.5, cz - 5, 4, 3.4, 0x6a5a3a);
     sandbags(cx - 7, cz + 6.5, cx - 2.5, cz + 6.5);
@@ -933,7 +970,9 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     tex.anisotropy = 8;
     return tex;
   }
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(S, S), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 }));
+  // relevo fino em mosaico sobre o chão pintado: o asfalto "pega" a luz (grão e microfissuras)
+  const groundBump = asphaltBump(Math.round(S / 3));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(S, S), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.92, bumpMap: groundBump, bumpScale: lowPower ? 0.6 : 1.1 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
   group.add(ground);
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(S * 4, S * 4), new THREE.MeshStandardMaterial({ color: 0x1e1c1a, roughness: 1 }));
@@ -1051,14 +1090,13 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
 
   // ----- luzes de fogo -----
   const fires = [];
-  const flameGeo = new THREE.ConeGeometry(0.35, 0.9, 7);
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.9 });
+  // chamas com textura (cartões cruzados) — a do acampamento é uma fogueira completa
   const lit = fireSpots.filter((f) => f.camp).concat(fireSpots.filter((f) => !f.camp).sort(() => r() - 0.5).slice(0, 5));
   for (const f of fireSpots) {
-    const fl = new THREE.Mesh(flameGeo, flameMat);
-    fl.position.set(f.x, f.y + 0.35, f.z);
-    group.add(fl);
-    const item = { ...f, flame: fl, light: null, ph: Math.random() * 10 };
+    const fx = f.camp ? makeFirePit(1.1) : makeFlames(3, 0.62);
+    fx.group.position.set(f.x, f.camp ? 0 : f.y - 0.12, f.z);
+    group.add(fx.group);
+    const item = { ...f, flame: fx, light: null, ph: Math.random() * 10 };
     if (lit.includes(f)) {
       const L = new THREE.PointLight(0xff8a3a, f.camp ? 26 : 16, f.camp ? 16 : 12, 1.6);
       L.position.set(f.x, f.y + 1.2, f.z);
@@ -1218,7 +1256,7 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     time += dt;
     for (const f of fires) {
       const fl = 0.8 + Math.sin(time * 13 + f.ph) * 0.12 + Math.sin(time * 27 + f.ph * 2) * 0.08;
-      f.flame.scale.set(fl, fl * (1 + Math.sin(time * 9 + f.ph) * 0.2), fl);
+      f.flame.update(time + f.ph, dt);
       if (f.light) f.light.intensity = (f.camp ? 26 : 16) * fl;
     }
     for (const n of nestObjs) {
@@ -1240,7 +1278,7 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
         if (o.geometry && !geoShared(o.geometry)) o.geometry.dispose();
       }
     });
-    groundTex.dispose();
+    groundTex.dispose(); groundBump.dispose();
     facadeMat.dispose(); plainMat.dispose(); glowMat.dispose();
     for (const b of fadeBuildings) if (b.mesh) b.mesh.material.dispose();
   }

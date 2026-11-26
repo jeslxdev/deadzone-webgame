@@ -531,6 +531,6 @@ export class Zombie {
     rig.armR.rotation.set(armX - Math.sin(this.gait.ph) * 0.12 + 0.15, 0.08, -0.12); // braço direito mais caído
     rig.elbowL.rotation.x = elb; rig.elbowR.rotation.x = elb - 0.2;
     if (this.extras.sac) this.extras.sac.scale.lerp(new THREE.Vector3(1, 1, 1), dt * 3);
-    if (this.extras.belly && this.fuse <= 0) this.extras.belly.scale.set(0.42, 0.4, 0.38).multiplyScalar(1 + Math.sin(this.gait.breath * 3) * 0.05);
+    if (this.extras.belly && this.fuse <= 0) this.extras.belly.scale.setScalar(1 + Math.sin(this.gait.breath * 3) * 0.05); // pivô (tamanho real na malha interna)
   }
 }

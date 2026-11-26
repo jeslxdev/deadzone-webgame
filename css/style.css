@@ -494,3 +494,67 @@ canvas#gl, canvas#overlay { touch-action: none; }
 body[data-touch] .side-panel, body[data-touch] .modal-box, body[data-touch] .profiles, body[data-touch] .tab-body, body[data-touch] #menu .menu-center { touch-action: pan-y; }
 /* campos com fonte >= 16px evitam o zoom automático ao focar (iOS) */
 body[data-touch] input, body[data-touch] textarea, body[data-touch] select { font-size: 16px; }
+
+/* ============================================================
+   MENU PRINCIPAL — estilo jogo
+   ============================================================ */
+#menu .mm-shade { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(5,5,7,.92) 0%, rgba(5,5,7,.72) 26%, rgba(5,5,7,.15) 52%, rgba(5,5,7,0) 70%),
+              linear-gradient(0deg, rgba(5,5,7,.7) 0%, rgba(5,5,7,0) 24%); }
+#menu .mm-left { position: absolute; left: clamp(28px, 5vw, 84px); top: 0; bottom: 0; width: min(420px, 42vw); display: flex; flex-direction: column; justify-content: center; gap: 36px; }
+#menu .mm-logo { font-size: clamp(46px, 5.6vw, 82px); line-height: .92; text-align: left; letter-spacing: 3px; }
+#menu .mm-tag { margin-top: 10px; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; color: #a8b98a; }
+#menu .mm-nav { display: flex; flex-direction: column; gap: 2px; }
+#menu .mm-item { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; padding: 9px 18px 9px 22px; border: 0; background: transparent; color: #cfc6b8;
+  font: 700 22px/1.1 var(--font); letter-spacing: 2px; text-transform: uppercase; text-align: left; cursor: pointer; transition: color .15s, background .2s, padding-left .2s; }
+#menu .mm-item::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: var(--accent2); transform: scaleY(0); transition: transform .18s; }
+#menu .mm-item:hover, #menu .mm-item:focus-visible, #menu .mm-item.open { color: #fff; padding-left: 30px; background: linear-gradient(90deg, rgba(192,57,43,.28), rgba(192,57,43,0)); outline: none; }
+#menu .mm-item:hover::before, #menu .mm-item:focus-visible::before, #menu .mm-item.open::before { transform: scaleY(1); }
+#menu .mm-item.primary { font-size: 30px; color: #fff; margin-bottom: 8px; }
+#menu .mm-item.primary .mm-label { text-shadow: 0 0 18px rgba(232,87,46,.55); }
+#menu .mm-sub { font: 500 13px var(--font); letter-spacing: .5px; text-transform: none; color: var(--dim); }
+#menu .mm-foot { display: flex; gap: 16px; font-size: 12px; letter-spacing: 1px; }
+#menu .mm-panel { position: absolute; left: calc(clamp(28px, 5vw, 84px) + min(420px, 42vw) + 12px); top: 50%; transform: translateY(-50%); width: min(440px, 34vw); max-height: 76vh; overflow: auto;
+  padding: 18px 18px 20px; background: rgba(14,12,11,.88); border: 1px solid rgba(255,220,180,.14); border-left: 3px solid var(--accent2); border-radius: 4px; box-shadow: 0 20px 60px rgba(0,0,0,.6); backdrop-filter: blur(6px); display: grid; gap: 12px; }
+#menu .mm-panel h2 { margin: 0; font: 400 20px var(--title); letter-spacing: 1px; color: #eee2cf; }
+#menu .mm-ph { display: flex; justify-content: space-between; align-items: center; }
+#menu .mm-x { border: 0; background: none; color: var(--dim); cursor: pointer; padding: 4px; }
+#menu .mm-x:hover { color: #fff; }
+#menu .mm-panel p { margin: 0; }
+#menu .mm-panel textarea { width: 100%; padding: 10px; background: rgba(0,0,0,.45); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: 13px monospace; resize: vertical; user-select: text; }
+#menu .mm-plist { display: grid; gap: 6px; }
+#menu .mm-pcard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,.35); cursor: pointer; transition: border-color .15s, background .15s; }
+#menu .mm-pcard:hover, #menu .mm-pcard:focus-visible { border-color: rgba(232,87,46,.6); outline: none; }
+#menu .mm-pcard.sel { border-color: var(--accent2); background: rgba(192,57,43,.16); }
+#menu .mm-code { display: block; padding: 8px 10px; margin-bottom: 8px; background: rgba(0,0,0,.45); border-radius: 3px; font-size: 13px; word-break: break-all; user-select: all; color: var(--text); }
+#menu .mm-hero { position: absolute; right: clamp(24px, 5vw, 80px); bottom: clamp(24px, 7vh, 70px); pointer-events: none; text-align: right; }
+#menu .mm-hcard { display: inline-grid; gap: 4px; padding: 12px 16px; border-right: 3px solid var(--accent2); background: linear-gradient(270deg, rgba(5,5,7,.75), rgba(5,5,7,0)); }
+#menu .mm-hname { font: 400 28px var(--title); letter-spacing: 1px; color: #f1e7d6; }
+#menu .mm-hsub { display: flex; justify-content: flex-end; align-items: center; gap: 6px; color: #d9a77a; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 14px; }
+#menu .mm-hsub .ic { width: 18px; height: 18px; }
+#menu .mm-hstats { display: flex; justify-content: flex-end; gap: 14px; color: var(--dim); font-size: 13px; }
+#menu .mm-hstats b { color: var(--text); }
+
+/* retrato (celular em pé) e telas baixas */
+@media (max-aspect-ratio: 1/1) {
+  #menu .mm-shade { background: linear-gradient(0deg, rgba(5,5,7,.95) 0%, rgba(5,5,7,.8) 42%, rgba(5,5,7,0) 70%); }
+  #menu .mm-left { left: 18px; right: 18px; width: auto; top: auto; bottom: 18px; justify-content: flex-end; gap: 14px; }
+  #menu .mm-brand { position: fixed; top: 18px; left: 18px; }
+  #menu .mm-logo { font-size: 40px; }
+  #menu .mm-tag { font-size: 11px; letter-spacing: 2px; }
+  #menu .mm-item { font-size: 18px; padding: 8px 14px; }
+  #menu .mm-item.primary { font-size: 24px; margin-bottom: 2px; }
+  #menu .mm-panel { left: 12px; right: 12px; width: auto; top: auto; bottom: 12px; transform: none; max-height: 70vh; z-index: 2; }
+  #menu .mm-hero { right: 18px; bottom: auto; top: 96px; }
+  #menu .mm-hname { font-size: 20px; }
+  #menu .mm-hstats { display: none; }
+}
+@media (max-height: 520px) and (min-aspect-ratio: 1/1) {
+  #menu .mm-left { gap: 12px; }
+  #menu .mm-logo { font-size: 36px; }
+  #menu .mm-item { font-size: 16px; padding: 6px 14px; }
+  #menu .mm-item.primary { font-size: 22px; }
+  #menu .mm-sub { font-size: 11px; }
+  #menu .mm-panel { max-height: 88vh; }
+}
+body[data-touch] #menu .mm-panel { touch-action: pan-y; }

@@ -52,16 +52,18 @@ function tube(pts, r, seg = 12) {
 // Mecha curvada, com raiz cheia e ponta fina. Evita os espinhos e cilindros rígidos.
 function hairLock(pts, radius) {
   const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
-  const rings = 10, sides = 6, vertices = [], uvs = [], indices = [];
+  const rings = 12, sides = 8, vertices = [], uvs = [], indices = [];
   for (let i = 0; i <= rings; i++) {
     const t = i / rings, p = curve.getPoint(t), tangent = curve.getTangent(t);
     const axis = Math.abs(tangent.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
     const u = new THREE.Vector3().crossVectors(tangent, axis).normalize();
     const v = new THREE.Vector3().crossVectors(tangent, u).normalize();
-    const r = radius * Math.max(0.07, Math.sin(Math.PI * (0.16 + 0.84 * t)));
+    const taper = Math.max(0.025, Math.sin(Math.PI * (0.08 + 0.92 * t)));
+    const width = radius * taper;
+    const thickness = radius * 0.22 * taper;
     for (let j = 0; j < sides; j++) {
       const a = j * Math.PI * 2 / sides;
-      const q = p.clone().addScaledVector(u, Math.cos(a) * r).addScaledVector(v, Math.sin(a) * r);
+      const q = p.clone().addScaledVector(u, Math.cos(a) * width).addScaledVector(v, Math.sin(a) * thickness);
       vertices.push(q.x, q.y, q.z);
       uvs.push(j / sides, t);
       if (i < rings) {
@@ -83,7 +85,7 @@ function lathe(profile, rMul = 1, seg = 22) {
 }
 
 // ---------- texturas de micro-relevo (evita aspecto "emborrachado") ----------
-let fabricTex = null, skinTex = null;
+let fabricTex = null, skinTex = null, grimeTex = null;
 function reliefTextures() {
   if (fabricTex) return;
   const make = (size, draw) => {
@@ -105,6 +107,18 @@ function reliefTextures() {
     for (let i = 0; i < 2500; i++) { const v = 100 + Math.random() * 60; g.fillStyle = `rgba(${v},${v},${v},0.5)`; g.fillRect(Math.random() * s, Math.random() * s, 1.5, 1.5); }
   });
   skinTex.repeat.set(3, 3);
+  // zumbis: sujeira, sangue seco e manchas de decomposição (multiplica a cor do corpo)
+  grimeTex = make(256, (g, s) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, s, s);
+    const blot = (n, col, r0, r1) => { for (let i = 0; i < n; i++) { const x = Math.random() * s, y = Math.random() * s, r = r0 + Math.random() * (r1 - r0); for (const [dx, dy] of [[0, 0], [s, 0], [-s, 0], [0, s], [0, -s]]) { const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2); } } };
+    blot(16, 'rgba(130,120,100,0.28)', 18, 60);  // sujeira (manchas amplas e suaves)
+    blot(9, 'rgba(110,40,30,0.32)', 8, 26);      // sangue seco
+    blot(8, 'rgba(95,105,75,0.25)', 14, 40);     // manchas de decomposição
+    for (let i = 0; i < 10; i++) { g.strokeStyle = 'rgba(90,30,25,' + (0.18 + Math.random() * 0.2) + ')'; g.lineWidth = 1 + Math.random() * 2; const x = Math.random() * s, y = Math.random() * s; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 6, y + 10 + Math.random() * 30); g.stroke(); } // escorridos
+    for (let i = 0; i < 3000; i++) { const v = 150 + Math.random() * 90; g.fillStyle = 'rgba(' + v + ',' + v + ',' + (v - 10) + ',0.18)'; g.fillRect(Math.random() * s, Math.random() * s, 1.5, 1.5); }
+  });
+  grimeTex.colorSpace = THREE.SRGBColorSpace;
+  grimeTex.repeat.set(1.2, 1.2);
 }
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color(), _up = new THREE.Vector3(0, 1, 0);
@@ -155,7 +169,7 @@ function headShape(v, sockets) {
   let { x, y, z } = v;
   if (y < 0) {
     const t = -y;
-    x *= 1 - 0.3 * t * t;                 // mandíbula estreita até o queixo
+    x *= 1 - 0.4 * t * t;                 // mandíbula estreita até o queixo
     if (z < 0) z *= 1 - 0.35 * t;          // nuca recua no pescoço
     if (z > 0) z *= 1 + 0.06 * t * (1 - t); // queixo/boca levemente à frente
   }
@@ -179,7 +193,7 @@ function headShape(v, sockets) {
 let headUnit = null;
 function headGeoUnit() {
   if (headUnit) return headUnit;
-  const g = new THREE.SphereGeometry(1, 30, 24);
+  const g = new THREE.SphereGeometry(1, 40, 32);
   const p = g.attributes.position, v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); headShape(v, true); p.setXYZ(i, v.x, v.y, v.z); }
   g.computeVertexNormals();
@@ -274,22 +288,24 @@ function addHairStyle(parts, hair, style, zombie = false) {
   }
   parts.add(scalpGeo(style), hair);
   const rng = mulberry32(style === 'longo' ? 517 : style === 'coque' ? 231 : 118);
-  const rows = zombie ? 4 : style === 'ralo' ? 7 : 11;
-  const columns = zombie ? 12 : style === 'ralo' ? 18 : 30;
+  // Fios em camadas sobrepostas cobrem a casca sem formar placas ou falhas
+  // quando a câmera gira. Zumbis usam uma malha menor para preservar FPS.
+  const rows = zombie ? 3 : style === 'ralo' ? 6 : style === 'longo' ? 9 : 8;
+  const columns = zombie ? 10 : style === 'ralo' ? 18 : style === 'longo' ? 30 : 26;
   for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
     const theta = (col + (row % 2) * 0.5 + (rng() - 0.5) * 0.3) * Math.PI * 2 / columns;
     const t = 0.07 + (row + (rng() - 0.5) * 0.3) / rows * 0.88;
     const flow = (rng() - 0.5) * 0.09;
     const p0 = scalpPoint(theta, t, style, 1.048);
-    const p1 = scalpPoint(theta + flow * 0.35, Math.min(0.98, t + 0.075), style, 1.066);
-    const p2 = scalpPoint(theta + flow * 0.8, Math.min(1, t + 0.15), style, 1.058);
-    const p3 = scalpPoint(theta + flow, Math.min(1.04, t + 0.22), style, 1.016);
-    parts.add(hairLock([p0, p1, p2, p3], zombie ? 0.004 : 0.0048),
+    const p1 = scalpPoint(theta + flow * 0.2, Math.min(0.98, t + 0.07), style, 1.067);
+    const p2 = scalpPoint(theta + flow * 0.55, Math.min(1, t + 0.15), style, 1.061);
+    const p3 = scalpPoint(theta + flow, Math.min(1.04, t + 0.23), style, 1.048);
+    parts.add(hairLock([p0, p1, p2, p3], zombie ? 0.005 : 0.009),
       col % 7 === 0 ? darker(hair, 0.82) : col % 9 === 0 ? mix(hair, 0xffffff, 0.12) : hair);
   }
   if (style === 'longo') {
-    for (let i = 0; i < (zombie ? 12 : 42); i++) {
-      const theta = Math.PI * (0.48 + i * 1.04 / (zombie ? 12 : 42));
+    for (let i = 0; i < (zombie ? 12 : 64); i++) {
+      const theta = Math.PI * (0.48 + i * 1.04 / (zombie ? 12 : 64));
       const root = scalpPoint(theta, 0.94, style, 1.045);
       const length = 0.17 + (i % 5) * 0.025;
       const sway = Math.sin(i * 2.7) * 0.022;
@@ -298,6 +314,16 @@ function addHairStyle(parts, hair, style, zombie = false) {
         [root[0] + sway * 0.4, root[1] - length * 0.7, root[2] - 0.03],
         [root[0] + sway, root[1] - length, root[2] - 0.035]], 0.009),
       i % 6 === 0 ? darker(hair, 0.85) : hair);
+    }
+  }
+  if (!zombie && style !== 'moicano' && style !== 'afro') {
+    // Mechas curtas sobre as têmporas fecham a linha lateral do couro cabeludo.
+    for (const side of [-1, 1]) for (let i = 0; i < 5; i++) {
+      const theta = side * (0.9 + i * 0.12);
+      const root = scalpPoint(theta, 0.25 + i * 0.105, style, 1.055);
+      const mid = scalpPoint(theta + side * 0.07, 0.39 + i * 0.105, style, 1.07);
+      const tip = scalpPoint(theta + side * 0.12, 0.53 + i * 0.105, style, 1.035);
+      parts.add(hairLock([root, mid, tip], 0.0062), i % 3 === 0 ? darker(hair, 0.84) : hair);
     }
   }
   if (style === 'coque') parts.add(P.sphere, hair, 0, 0.43, -0.11, 0.065, 0.06, 0.068);
@@ -320,6 +346,7 @@ function addModeledHair(head, ap, mats, shadows) {
 
 const HEAD_S = new THREE.Vector3(0.185, 0.225, 0.2); // escala do crânio
 const HEAD_Y = 0.2;
+const HEAD_SCALE = 0.8; // aplicado ao grupo da cabeça (modelo procedural)
 
 const BUILD_W = { magro: 0.86, normal: 1, forte: 1.2, gordo: 1.45 };
 function mix(a, b, t) { const A = new THREE.Color(a), B = new THREE.Color(b); return A.lerp(B, t).getHex(); }
@@ -386,38 +413,66 @@ function buildGeometries(ap, zombie) {
     T.cloth.add(P.sphere, top, -shX, 0.6, 0, 0.07 * aw * musc, 0.072 * aw, 0.076 * aw * musc); // deltoides
     T.cloth.add(P.sphere, top, shX, 0.6, 0, 0.07 * aw * musc, 0.072 * aw, 0.076 * aw * musc);
     // gola, cinto, fivela
-    T.cloth.add(P.cylOpen, darker(top, 0.8), 0, 0.735, 0, 0.078, 0.035, 0.07);
+    T.cloth.add(P.cylOpen, darker(top, 0.8), 0, 0.725, 0, 0.092, 0.035, 0.084); // gola (envolve o pescoço)
     T.cloth.add(P.cylOpen, dark, 0, 0.16, 0, 0.19 * xS + 0.008, 0.05, 0.19 * zS + 0.008);
     T.cloth.add(P.sphere, 0x9a8a5a, 0, 0.16, 0.19 * zS + 0.012, 0.03, 0.024, 0.008);
-    // Colete de campo e bolsas arredondadas de saque, com costuras e presilhas.
+    // Superfície real do tronco (perfil de revolução escalado): tudo o que é
+    // vestido por cima (colete, alças, bolsos) é posicionado sobre ela, sem flutuar.
+    const rAt = (y) => {
+      const p = torsoProf;
+      if (y <= p[0][0]) return p[0][1];
+      for (let i = 1; i < p.length; i++) if (y <= p[i][0]) { const [y0, r0] = p[i - 1], [y1, r1] = p[i]; return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0); }
+      return p[p.length - 1][1];
+    };
+    const surfZ = (y, x, add) => zS * Math.sqrt(Math.max(0, (rAt(y) + add) ** 2 - (x / xS) ** 2));
+    const VEST = 0.012 + 0.013; // camisa + espessura do colete
+    // Colete de campo: painéis da frente e das costas que seguem o tronco
+    // (abertos nas laterais para os braços não atravessarem o tecido).
     if (!zombie) {
-      T.cloth.add(P.sphere, darker(top, 0.68), 0, 0.46, 0.055, 0.177 * bw, 0.145, 0.026);
-      for (const sx of [-1, 1]) {
-        T.cloth.add(capsule(0.016, 0.18), darker(top, 0.62), sx * 0.115 * bw, 0.49, 0.105, 1, 1, 1, 0.65, 0, sx * -0.08);
-        T.cloth.add(P.sphere, darker(ap.pack, 0.72), sx * 0.142 * bw, 0.27, 0.035, 0.052, 0.075, 0.042);
-        T.cloth.add(P.cylOpen, 0x8b7850, sx * 0.142 * bw, 0.25, 0.079, 0.042, 0.012, 0.034);
+      const vestCol = mix(darker(top, 0.55), 0x3a3d2c, 0.55);
+      const vestProf = torsoProf.filter(([y]) => y >= 0.26 && y <= 0.62).map(([y, rr]) => new THREE.Vector2(rr + VEST, y));
+      for (const phi0 of [-0.95, Math.PI - 0.95]) {
+        const g = new THREE.LatheGeometry(vestProf, 14, phi0, 1.9);
+        g.scale(xS, 1, zS);
+        T.cloth.add(g, vestCol);
       }
-      T.cloth.add(P.sphere, darker(top, 0.58), 0, 0.56, 0.072, 0.07, 0.025, 0.016);
+      for (const sx of [-1, 1]) {
+        // bolsos com aba, encostados no colete e girados conforme a curva do peito
+        const px = sx * 0.088 * bw, py = 0.36;
+        const pz = surfZ(py, px, VEST) + 0.016;
+        T.cloth.add(box(0.07, 0.085, 0.034), darker(vestCol, 0.9), px, py, pz, 1, 1, 1, 0, sx * 0.32, 0);
+        T.cloth.add(box(0.074, 0.026, 0.038), darker(vestCol, 0.75), px, py + 0.04, pz + 0.002, 1, 1, 1, -0.12, sx * 0.32, 0);
+      }
     }
     // pescoço (esternocleidomastoide)
-    T.skin.add(lathe([[0.7, 0.068], [0.78, 0.062], [0.86, 0.058], [0.9, 0.055]], 1, 16), skin);
-    T.skin.add(capsule(0.016, 0.1), skin, -0.03, 0.8, 0.04, 1, 1, 1, 0.35, 0, 0.35);
-    T.skin.add(capsule(0.016, 0.1), skin, 0.03, 0.8, 0.04, 1, 1, 1, 0.35, 0, -0.35);
+    T.skin.add(lathe([[0.7, 0.082], [0.78, 0.074], [0.86, 0.068], [0.92, 0.064]], 1, 16), skin);
+    // esternocleidomastoide: volumes rasos, embutidos no pescoço (não atravessam a pele)
+    T.skin.add(capsule(0.015, 0.08), skin, -0.03, 0.79, 0.04, 1, 1, 1, 0.2, 0, 0.25);
+    T.skin.add(capsule(0.015, 0.08), skin, 0.03, 0.79, 0.04, 1, 1, 1, 0.2, 0, -0.25);
     if (!zombie) {
       // mochila com alças
       T.cloth.add(capsule(0.12, 0.2), ap.pack, 0, 0.42, -0.2 * zS - 0.11, 1.5 * Math.min(bw, 1.2), 1, 0.62);
       T.cloth.add(P.sphere, darker(ap.pack, 0.85), 0, 0.57, -0.2 * zS - 0.12, 0.17, 0.065, 0.1);
       T.cloth.add(capsule(0.05, 0.12), darker(ap.pack, 0.9), 0, 0.3, -0.2 * zS - 0.2, 1.6, 1, 0.6, 0, 0, Math.PI / 2);
-      for (const sx of [-0.1, 0.1]) {
-        const fz = 0.2 * zS + 0.012, bz = 0.2 * zS + 0.02;
-        const st = tube([[sx * bw, 0.3, fz * 0.95], [sx * bw * 1.05, 0.52, fz * 1.05], [sx * bw * 1.15, 0.7, 0.02], [sx * bw * 1.1, 0.6, -bz], [sx * bw, 0.45, -bz - 0.02]], 0.011, 16);
-        st.scale(1, 1, 1);
-        T.cloth.add(st, 0x2a241e, 0, 0, 0, 1.0, 1, 1);
+      // alças: faixas recortadas da própria superfície do tronco (mesmo perfil da
+      // camisa, alguns mm para fora), então ficam coladas ao corpo em todo o trajeto:
+      // sobem do colete pelo peito, somem sob o trapézio e descem pelas costas até a mochila.
+      const strapProf = [];
+      for (let y = 0.46; y <= 0.735; y += 0.0125) strapProf.push(new THREE.Vector2(rAt(y) + (y <= 0.62 ? VEST + 0.004 : 0.013), y));
+      const strapW = 0.15; // largura angular (~3,5 cm)
+      const phiC = Math.asin(Math.min(0.9, (0.095 * bw) / (xS * (rAt(0.6) + 0.013))));
+      for (const sx of [-1, 1]) for (const base of [phiC, Math.PI - phiC]) {
+        const g = new THREE.LatheGeometry(strapProf, 3, sx * base - strapW / 2, strapW);
+        g.scale(xS, 1, zS);
+        T.cloth.add(g, 0x2a241e);
       }
     } else {
-      T.cloth.add(P.sphere, 0x4a0c0c, 0.08, 0.33, front(0.33), 0.075, 0.09, 0.02);
-      T.cloth.add(P.sphere, 0x3a0a0a, -0.05, 0.22, front(0.22), 0.05, 0.06, 0.02);
-      for (let i = 0; i < 3; i++) T.skin.add(capsule(0.008, 0.05), mix(skin, 0xd8d0b8, 0.5), -0.1, 0.36 + i * 0.04, front(0.4) + 0.006, 1, 1, 1, 0, 0, Math.PI / 2 - 0.2);
+      // rasgos ensanguentados na camisa, colados à superfície do tronco
+      T.cloth.add(P.sphere, 0x4a0c0c, 0.08, 0.33, surfZ(0.33, 0.08, 0.004), 0.075, 0.09, 0.02);
+      T.cloth.add(P.sphere, 0x3a0a0a, -0.05, 0.22, surfZ(0.22, -0.05, 0.004), 0.05, 0.06, 0.02);
+      // costelas expostas DENTRO de um rasgo escuro (antes flutuavam sobre a camisa)
+      T.cloth.add(P.sphere, 0x2a0808, -0.1, 0.4, surfZ(0.4, -0.1, 0.002), 0.052, 0.065, 0.016);
+      for (let i = 0; i < 3; i++) T.skin.add(capsule(0.0065, 0.04), mix(skin, 0xd8d0b8, 0.55), -0.1, 0.36 + i * 0.035, surfZ(0.36 + i * 0.035, -0.1, 0.008), 1, 1, 1, 0, 0, Math.PI / 2 - 0.2);
     }
     out.torso = T;
   }
@@ -426,6 +481,8 @@ function buildGeometries(ap, zombie) {
   {
     const H = parts();
     H.skin.add(headGeoUnit(), skin, 0, HEAD_Y, 0, HEAD_S.x, HEAD_S.y, HEAD_S.z);
+    // Volumes suaves das maçãs e do queixo dão transição ao rosto sem criar
+    // placas duras sobre a cabeça esculpida.
     // orelhas
     for (const s of [-1, 1]) {
       H.skin.add(P.sphere, skin, s * 0.168, 0.2, -0.012, 0.016, 0.032, 0.024, 0.1, s * 0.35, 0);
@@ -433,17 +490,17 @@ function buildGeometries(ap, zombie) {
     }
     // nariz: ponte, ponta, asas
     H.skin.add(capsule(0.012, 0.045), skin, 0, 0.183, 0.193, 1.1, 1, 1, -0.4, 0, 0);
-    H.skin.add(P.sphere, skin, 0, 0.153, 0.21, 0.017, 0.016, 0.019);
-    H.skin.add(P.sphere, skin, -0.017, 0.147, 0.2, 0.014, 0.012, 0.013);
-    H.skin.add(P.sphere, skin, 0.017, 0.147, 0.2, 0.014, 0.012, 0.013);
-    H.skin.add(P.sphere, darker(skin, 0.45), -0.009, 0.139, 0.205, 0.006, 0.004, 0.006, 0, 0, 0, false); // narinas
-    H.skin.add(P.sphere, darker(skin, 0.45), 0.009, 0.139, 0.205, 0.006, 0.004, 0.006, 0, 0, 0, false);
+    // ponta discreta e asas pequenas embutidas no rosto (sem "nariz de palhaço")
+    H.skin.add(P.sphere, skin, 0, 0.152, 0.205, 0.013, 0.013, 0.015);
+    H.skin.add(P.sphere, skin, -0.012, 0.146, 0.196, 0.009, 0.008, 0.009);
+    H.skin.add(P.sphere, skin, 0.012, 0.146, 0.196, 0.009, 0.008, 0.009);
+    H.skin.add(P.sphere, darker(skin, 0.5), -0.0075, 0.14, 0.2, 0.0045, 0.003, 0.004, 0, 0, 0, false); // narinas
+    H.skin.add(P.sphere, darker(skin, 0.5), 0.0075, 0.14, 0.2, 0.0045, 0.003, 0.004, 0, 0, 0, false);
     // lábios e boca
     const mz = 0.187;
     if (!zombie) {
-      H.skin.add(tube([[-0.026, 0.103, mz - 0.007], [-0.012, 0.108, mz + 0.001], [0, 0.106, mz + 0.003], [0.012, 0.108, mz + 0.001], [0.026, 0.103, mz - 0.007]], 0.0055), lip);
-      H.skin.add(tube([[-0.022, 0.1, mz - 0.006], [-0.01, 0.0955, mz + 0.001], [0, 0.0948, mz + 0.002], [0.01, 0.0955, mz + 0.001], [0.022, 0.1, mz - 0.006]], 0.0068), lip);
-      H.skin.add(tube([[-0.027, 0.1015, mz - 0.005], [0, 0.1012, mz + 0.004], [0.027, 0.1015, mz - 0.005]], 0.0022, 8), darker(lip, 0.35), 0, 0, 0, 1, 1, 1, 0, 0, 0, false);
+      H.skin.add(tube([[-0.023, 0.103, mz], [-0.012, 0.107, mz + 0.002], [0, 0.106, mz + 0.003], [0.012, 0.107, mz + 0.002], [0.023, 0.103, mz]], 0.0038), lip);
+      H.skin.add(tube([[-0.019, 0.099, mz + 0.001], [0, 0.0965, mz + 0.003], [0.019, 0.099, mz + 0.001]], 0.0025), darker(lip, 0.72));
     } else {
       H.skin.add(P.sphere, 0x1a0606, 0, 0.098, mz, 0.034, 0.02, 0.012, 0, 0, 0, false);
       for (let i = 0; i < 5; i++) H.skin.add(P.sphere, 0xc8c0a0, -0.02 + i * 0.01, 0.111, mz + 0.004, 0.005, 0.006, 0.004, 0, 0, 0, false);
@@ -452,19 +509,19 @@ function buildGeometries(ap, zombie) {
     for (const s of [-1, 1]) {
       const ex = s * 0.058, ey = 0.222, ez = 0.165;
       if (!zombie) {
-        H.eyes.add(P.sphere, 0xf2eee8, ex, ey, ez + 0.008, 0.020, 0.019, 0.018, 0, 0, 0, false);
-        H.eyes.add(P.sphere, ap.eyes ?? 0x3a2a1a, ex, ey, ez + 0.024, 0.0095, 0.0095, 0.004, 0, 0, 0, false);
-        H.eyes.add(P.sphere, 0x050505, ex, ey, ez + 0.027, 0.004, 0.004, 0.002, 0, 0, 0, false);
+        H.eyes.add(P.sphere, 0xf2eee8, ex, ey, ez + 0.008, 0.019, 0.015, 0.016, 0, 0, 0, false);
+        H.eyes.add(P.sphere, ap.eyes ?? 0x3a2a1a, ex, ey, ez + 0.022, 0.008, 0.009, 0.0035, 0, 0, 0, false);
+        H.eyes.add(P.sphere, 0x050505, ex, ey, ez + 0.025, 0.0035, 0.004, 0.0018, 0, 0, 0, false);
       } else {
         H.skin.add(P.sphere, 0x3a2a22, ex, ey, ez, 0.026, 0.026, 0.026, 0, 0, 0, false);
       }
       // pálpebra superior cobre o topo do globo, inferior suaviza
-      H.skin.add(lidGeo, skin, ex, ey + 0.001, ez + 0.008, 0.022, 0.022, 0.022, 0.32, 0, 0);
+      H.skin.add(lidGeo, skin, ex, ey + 0.004, ez + 0.007, 0.022, 0.022, 0.022, zombie ? 0.32 : 0.2, 0, 0); // pálpebra cobre o topo da íris (zumbi: caídos)
       H.skin.add(tube([[ex - 0.022, ey - 0.008, ez + 0.012], [ex, ey - 0.019, ez + 0.02], [ex + 0.022, ey - 0.008, ez + 0.012]], 0.0035, 8), darker(skin, 0.92));
       // sobrancelha em arco
       if (!zombie || ap.hairStyle !== 'careca') {
-        const bg = tube([[ex - s * 0.022, 0.252, 0.197], [ex - s * 0.004, 0.261, 0.2], [ex + s * 0.016, 0.26, 0.195], [ex + s * 0.03, 0.251, 0.186]], 0.0058, 10);
-        bg.scale(1, 0.8, 1);
+        const bg = tube([[ex - s * 0.022, 0.252, 0.197], [ex - s * 0.004, 0.261, 0.2], [ex + s * 0.016, 0.26, 0.195], [ex + s * 0.03, 0.251, 0.186]], 0.0042, 10);
+        bg.scale(1, 0.75, 1);
         H.cloth.add(bg, hair, 0, 0.05, 0);
       }
     }
@@ -546,6 +603,8 @@ function buildGeometries(ap, zombie) {
     if (sleeve !== 'none') {
       const sl = sleeve === 'long' ? upper : upper.filter(([y]) => y >= -0.2);
       U.cloth.add(lathe(sl.map(([y, rr]) => [y, rr + 0.012]), aw * musc), top);
+      // tampa arredondada do ombro: fecha a boca da manga (sem fresta de pele) e gira junto com o braço
+      U.cloth.add(P.sphere, top, 0, 0.012, 0, 0.074 * aw * musc, 0.05, 0.074 * aw * musc);
       if (sleeve === 'long') {
         D.cloth.add(lathe(fore.filter(([y]) => y >= -0.56).map(([y, rr]) => [y, rr + 0.012]), aw), top, 0, E);
         D.cloth.add(P.sphere, top, 0, 0, -0.008, 0.064 * aw, 0.064 * aw, 0.064 * aw);
@@ -783,7 +842,7 @@ export function buildHumanoid(ap, opts = {}) {
     overMat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.85, metalness: 0, alphaTest: 0.5, side: THREE.DoubleSide });
     mats.push(baseMat, overMat);
   } else if (zombie) {
-    bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0, bumpMap: fabricTex, bumpScale: 1.2 });
+    bodyMat = new THREE.MeshStandardMaterial({ map: grimeTex, vertexColors: true, roughness: 0.88, metalness: 0, bumpMap: fabricTex, bumpScale: 1.2 });
     mats.push(bodyMat);
   } else {
     skinMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0, bumpMap: skinTex, bumpScale: 0.4 });
@@ -827,6 +886,9 @@ export function buildHumanoid(ap, opts = {}) {
 
   const head = new THREE.Group();
   head.position.y = 0.8;
+  // proporção realista: cabeça ~1/6 da altura (antes ~1/4.7, aspecto de boneco).
+  // Escala a partir da base: o pescoço continua entrando na mandíbula.
+  if (!skinMode) head.scale.setScalar(HEAD_SCALE);
   torso.add(head);
   add(head, geos.head);
   const modeledHairGeo = skinMode ? addModeledHair(head, ap, mats, shadows) : null;
@@ -961,7 +1023,8 @@ export function buildWeapon(baseId, rarity = 0) {
     const grip = wmat('gunGrip', () => mat(0x17191c, { roughness: 0.9 }));
     const receiverY = -L * (pistol ? 0.38 : 0.29);
     const bodyLen = Math.max(0.16, L * (pistol ? 0.65 : 0.43));
-    g.add(wm(box(0.12, bodyLen, 0.13), metal2, 0, receiverY, 0.055));
+    g.add(wm(capsule(0.052, bodyLen * 0.78), metal2, 0, receiverY, 0.055, 0, 0, 0, 1.04, 1, 1.12));
+    g.add(wm(box(0.085, bodyLen * 0.68, 0.075), metal, 0, receiverY, 0.066));
     for (const side of [-1, 1]) {
       g.add(wm(box(0.008, bodyLen * 0.78, 0.082), metal, side * 0.065, receiverY, 0.057));
       g.add(wm(box(0.008, bodyLen * 0.46, 0.009), accent, side * 0.071, receiverY - bodyLen * 0.09, 0.102));
@@ -1044,7 +1107,8 @@ export function buildWeapon(baseId, rarity = 0) {
 }
 
 // ---------- Aparência de zumbis (variações em cache) ----------
-const Z_SKIN = [0x7a9a5a, 0x8aa06a, 0x6e8b5a, 0x9aa38a, 0x7d8f6b, 0xa3a88f, 0x6b7b55];
+// pele em decomposição: cinza-oliva pálido, sem o verde "de brinquedo"
+const Z_SKIN = [0x8d9478, 0x9a9a84, 0x7f8a6c, 0xa39c86, 0x868c74, 0x9c9a7e, 0x78806a];
 const Z_CLOTH = [0x4a4038, 0x3a3e44, 0x5a3030, 0x2f3a2f, 0x5c5446, 0x3d3550, 0x6a5a40, 0x2a2a2a, 0x4a3a5a];
 export const ZOMBIE_VARIANTS = 6;
 export function zombieAppearance(type, variant = Math.floor(Math.random() * ZOMBIE_VARIANTS)) {
@@ -1062,8 +1126,8 @@ export function zombieAppearance(type, variant = Math.floor(Math.random() * ZOMB
   if (type === 'blindado') { ap.top = 0x4b5320; ap.pants = 0x3d4220; ap.accessory = 'capacete'; ap.build = 'forte'; ap.hairStyle = 'careca'; ap.sleeves = 'long'; ap.tornArm = false; }
   if (type === 'brutamontes') { ap.build = 'gordo'; ap.hairStyle = 'careca'; ap.top = pick([0x6a5a4a, 0x4a3a2a], r); ap.sleeves = 'short'; }
   if (type === 'corredor') { ap.build = 'magro'; }
-  if (type === 'cuspidor') { ap.build = 'magro'; ap.skin = 0x8fb04a; ap.eyes = 0xc8ff00; }
-  if (type === 'explosivo') { ap.build = 'gordo'; ap.skin = 0xa08060; ap.eyes = 0xff6a00; ap.sleeves = 'short'; }
+  if (type === 'cuspidor') { ap.build = 'magro'; ap.skin = 0x8f9a62; ap.eyes = 0xc8ff00; }
+  if (type === 'explosivo') { ap.build = 'gordo'; ap.skin = 0x9c8a66; ap.eyes = 0xff6a00; ap.sleeves = 'short'; }
   return ap;
 }
 
@@ -1072,24 +1136,41 @@ const decoMats = {};
 function dmat(k, make) { return decoMats[k] || (decoMats[k] = make()); }
 export function decorateZombie(rig, type) {
   const extras = {};
+  // Partes que pulsam (bolsa de ácido, barriga) ficam num pivô de escala 1:
+  // zombies.js anima a escala do pivô (1 → 1.4), o tamanho real fica na malha interna.
   if (type === 'cuspidor') {
-    const sac = new THREE.Mesh(P.sphere, dmat('sac', () => mat(0x9aff3a, { emissive: 0x6aff00, emissiveIntensity: 0.9, roughness: 0.35 })));
-    sac.position.set(0, 0.04, 0.11); sac.scale.setScalar(0.16);
+    const sac = new THREE.Group();
+    sac.position.set(0, 0.055, 0.105); // papo inchado sob a mandíbula
+    const m = new THREE.Mesh(P.sphere, dmat('sac', () => mat(0x9fb84a, { emissive: 0x6a9a10, emissiveIntensity: 0.22, roughness: 0.28 })));
+    m.scale.set(0.075, 0.062, 0.07);
+    sac.add(m);
+    const vein = dmat('sacVein', () => mat(0x4a5a1a, { roughness: 0.6 }));
+    for (let i = 0; i < 3; i++) { const v = new THREE.Mesh(P.sphereLo, vein); v.position.set((i - 1) * 0.03, 0.01 - Math.abs(i - 1) * 0.012, 0.062); v.scale.set(0.006, 0.03, 0.006); v.rotation.z = (i - 1) * 0.5; sac.add(v); }
     rig.head.add(sac);
     extras.sac = sac;
   }
   if (type === 'explosivo') {
-    const belly = new THREE.Mesh(P.sphere, dmat('belly', () => mat(0xc87a3a, { emissive: 0xff5a00, emissiveIntensity: 0.55, roughness: 0.45 })));
-    belly.position.set(0, 0.3, 0.12); belly.scale.set(0.42, 0.4, 0.38);
-    rig.torso.add(belly);
-    const pm = dmat('pus', () => mat(0xe8d24a, { emissive: 0xaa6a00, emissiveIntensity: 0.6 }));
-    for (let i = 0; i < 5; i++) {
-      const p = new THREE.Mesh(P.sphereLo, pm);
-      const a = i * 1.3;
-      p.position.set(Math.cos(a) * 0.3, 0.3 + Math.sin(a * 1.7) * 0.2, 0.36);
-      p.scale.setScalar(0.05);
-      rig.torso.add(p);
+    const belly = new THREE.Group();
+    belly.position.set(0, 0.29, 0.1);
+    reliefTextures();
+    const m = new THREE.Mesh(P.sphere, dmat('belly', () => new THREE.MeshStandardMaterial({ color: 0xb09a72, map: grimeTex, emissive: 0xff4a00, emissiveIntensity: 0.08, roughness: 0.38, bumpMap: skinTex, bumpScale: 0.6 })));
+    m.scale.set(0.3, 0.32, 0.29); // saliente para a frente, integrada ao tronco
+    m.position.y = -0.02;
+    belly.add(m);
+    // veias escuras e poucas pústulas, coladas à superfície da barriga
+    const vm = dmat('vein', () => mat(0x4a3a4a, { roughness: 0.6 }));
+    const pm = dmat('pus', () => mat(0xc8b25a, { emissive: 0x8a5a00, emissiveIntensity: 0.25, roughness: 0.3 }));
+    const n = new THREE.Vector3();
+    for (let i = 0; i < 9; i++) {
+      const a = -0.8 + i * 0.2, b = Math.sin(i * 2.3) * 0.45, pus = i % 4 === 1;
+      n.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
+      const p = new THREE.Mesh(P.sphereLo, pus ? pm : vm);
+      p.position.set(n.x * 0.3, n.y * 0.32 - 0.02, n.z * 0.29);
+      if (pus) p.scale.setScalar(0.022);
+      else { p.scale.set(0.006, 0.05, 0.004); p.lookAt(p.position.clone().multiplyScalar(2)); p.rotateZ(i); } // eixo longo (Y) tangente à pele
+      belly.add(p);
     }
+    rig.torso.add(belly);
     extras.belly = belly;
   }
   if (type === 'blindado') {

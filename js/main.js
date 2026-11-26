@@ -16,6 +16,7 @@ import { toast } from './ui.js';
 import { loadModels } from './models.js';
 import { isTouch, lowPower } from './device.js';
 import { initAudio, startAmbience, startMusic } from './audio.js';
+import { createPost } from './post.js';
 
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -42,11 +43,17 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 
+const post = createPost(renderer);
 const overlay = document.getElementById('overlay');
 const octx = overlay.getContext('2d');
 
 const app = {
-  renderer, overlay, octx,
+  renderer, overlay, octx, post,
+  // desenha a cena com o acabamento de imagem (ou direto, se desligado)
+  draw(scene, camera) {
+    if (scene.environment !== post.envTex) post.applyEnvironment(scene, scene.userData.envIntensity ?? 0.3);
+    post.render(scene, camera);
+  },
   screen: null,
   screenName: '',
   profile: null,
@@ -144,6 +151,7 @@ window.__zm = app; // útil para depuração no console
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h);
+  post.setSize(w, h);
   const dpr = Math.min(devicePixelRatio, 2);
   overlay.width = w * dpr; overlay.height = h * dpr;
   overlay.style.width = w + 'px'; overlay.style.height = h + 'px';

@@ -836,7 +836,7 @@ export class Game {
   }
 
   render() {
-    this.app.renderer.render(this.scene, this.camera);
+    this.app.draw(this.scene, this.camera);
     this.hud.drawOverlay(this.app.octx);
   }
 
