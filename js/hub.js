@@ -6,6 +6,7 @@ import { CLASSES, MAPS, WEAPONS, SHOP, RARITIES, ZOMBIE_TYPES, SKILLS, SKILL_KEY
 import { canLearn, learnSkill, storeMode } from './rpg.js';
 import { skillCooldown } from './skills.js';
 import { saveProfile, itemValue, itemInfo, xpToNext, exportProfile, randomWeapon, deriveStats, addToBag } from './rpg.js';
+import { auth } from './auth.js';
 import { buildHumanoid } from './character.js';
 import { el, fmtMoney, escapeHtml, rand, uid } from './util.js';
 import { toast, itemCardHtml, renderAttributes } from './ui.js';
@@ -265,7 +266,10 @@ export class Hub {
     body.querySelector('#hb-export').onclick = () => {
       const box = body.querySelector('#hb-code');
       box.classList.remove('hidden');
-      box.querySelector('textarea').value = exportProfile(p);
+      const ta = box.querySelector('textarea');
+      if (!auth.on) { ta.value = exportProfile(p); return; }
+      ta.value = 'Gerando código...';
+      auth.exportCode(p).then((code) => { ta.value = code; }).catch((e) => { ta.value = ''; toast('Não foi possível exportar: ' + e.message, 'warn'); });
     };
     body.querySelector('#hb-copy') && (body.querySelector('#hb-copy').onclick = async () => {
       const ta = body.querySelector('#hb-code textarea');
@@ -301,7 +305,12 @@ export class Hub {
       this.buildCharacter();
       this.renderUI();
     });
+    // com servidor: a venda acontece lá (o preço e o dinheiro são calculados no servidor)
+    const sellOnServer = (uids, all) => auth.sell(p, uids, all)
+      .then((r) => { r.total ? (all ? sfx.rare() : sfx.pickup()) : 0; toast(`${all ? 'Vendido: ' : ''}+${fmtMoney(r.total)}`, 'loot'); this.renderUI(); })
+      .catch((e) => toast('Venda recusada: ' + e.message, 'warn'));
     body.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => {
+      if (auth.on) { b.disabled = true; return sellOnServer([b.dataset.sell], false); }
       const i = p.stash.findIndex((x) => x.uid === b.dataset.sell);
       if (i < 0) return;
       const v = Math.round(itemValue(p.stash[i]) * mm);
@@ -313,6 +322,7 @@ export class Hub {
     });
     const sa = body.querySelector('#sell-all');
     if (sa) sa.onclick = () => {
+      if (auth.on) { sa.disabled = true; return sellOnServer([], true); }
       const v = Math.round(valTotal * mm);
       p.money += v;
       p.stash = p.stash.filter((x) => x.kind !== 'valuable');
@@ -365,6 +375,18 @@ export class Hub {
     body.querySelectorAll('[data-buy]').forEach((b) => b.onclick = () => {
       const s = SHOP.find((x) => x.id === b.dataset.buy);
       if (p.money < s.price) return;
+      if (auth.on) { // compra feita no servidor: ele cobra e sorteia a arma
+        b.disabled = true;
+        auth.buy(p, s.id).then((r) => {
+          if (r.got.kind === 'weapon') {
+            const i = itemInfo(r.got);
+            toast(`${icon(s.icon)} Você obteve: <b style="color:${i.color}">${i.name}</b> (${i.rarity})`, 'loot', 4000);
+            r.got.rarity >= 3 ? sfx.rare() : sfx.pickup();
+          } else { sfx.pickup(); toast(`Comprado: ${s.name}`); }
+          this.renderUI();
+        }).catch((e) => { toast('Compra recusada: ' + e.message, 'warn'); this.renderUI(); });
+        return;
+      }
       p.money -= s.price;
       if (s.give) addToBag(p.stash, { uid: uid(), ...s.give }, Infinity);
       if (s.crate) {

@@ -3,7 +3,8 @@
 // ============================================================
 import * as THREE from 'three';
 import { CLASSES } from './data.js';
-import { listProfiles, deleteProfile, importProfile, saveProfile, getProfile, storeMode, getSession, restoreSession } from './rpg.js';
+import { listProfiles, deleteProfile, importProfile, saveProfile, getProfile, storeMode, getSession, restoreSession, initStore } from './rpg.js';
+import { auth } from './auth.js';
 import { buildHumanoid, zombieAppearance, decorateZombie } from './character.js';
 import { buildCampScene } from './hub.js';
 import { el, escapeHtml, rand, pick } from './util.js';
@@ -46,7 +47,7 @@ export class Menu {
           <button class="btn ghost" id="m-settings">${icon('som')} Configurações</button>
         </div>
         <div class="import-box hidden" id="m-ibox">
-          <textarea id="m-code" rows="3" placeholder="Cole aqui o código ZM1:..."></textarea>
+          <textarea id="m-code" rows="3" placeholder="Cole aqui o código do personagem (ZM2:...)"></textarea>
           <button class="btn sm" id="m-doimport">Importar</button>
         </div>
         <div class="session-box dim" id="m-session"></div>
@@ -57,7 +58,16 @@ export class Menu {
     this.root.querySelector('#m-new').onclick = () => { initAudio(); sfx.click(); app.go('creator'); };
     this.root.querySelector('#m-settings').onclick = () => openSettings();
     this.root.querySelector('#m-import').onclick = () => this.root.querySelector('#m-ibox').classList.toggle('hidden');
-    this.root.querySelector('#m-doimport').onclick = () => {
+    this.root.querySelector('#m-doimport').onclick = async () => {
+      if (auth.on) { // o servidor confere a assinatura do código (não aceita personagem editado)
+        try {
+          const r = await auth.importCode(this.root.querySelector('#m-code').value);
+          await initStore();
+          toast(r.moved ? `Personagem ${escapeHtml(r.profile.name)} trazido para esta sessão` : `Personagem ${escapeHtml(r.profile.name)} importado!`);
+          this.renderProfiles();
+        } catch (e) { toast('Código inválido: ' + e.message, 'warn'); }
+        return;
+      }
       try {
         const p = importProfile(this.root.querySelector('#m-code').value);
         const exists = getProfile(p.id);

@@ -20,6 +20,7 @@ import { updateOcclusionWindow } from './occlusion.js';
 import { Coop } from './coop.js';
 import { net, playerInfo } from './net.js';
 import { setMusicIntensity } from './audio.js';
+import { auth } from './auth.js';
 
 const MAX_ZOMBIES = 160;
 const bulletGeo = new THREE.BoxGeometry(0.07, 0.07, 0.9);
@@ -103,7 +104,7 @@ export class Game {
     if (role !== 'client') { this.setupNestsAndBosses(); this.spawnInitial(); }
     else for (const n of this.world.nests) { n.maxHp = n.hp = 1; }
     if (opts.coop) this.coop = new Coop(this, role, opts.coop.code, opts.coop.join);
-    profile.stats.runs++;
+    if (!auth.on) profile.stats.runs++; // com servidor, ele conta
 
     this.hud = new HUD(this);
     if (isTouch) { this.touch = new TouchControls(this); this.resize(innerWidth, innerHeight); }
@@ -381,13 +382,18 @@ export class Game {
     this.effects.explosion(n.x, n.z, n.mother ? 9 : 5, 0xb040ff);
     this.effects.beam(n.x, n.z, 0xb040ff, 1.2);
     this.nestDestroyedFx(n);
-    this.sharedXp(Math.round((n.mother ? 700 : 160) * (1 + 0.25 * (lvl - 1))));
-    this.profile.stats.nests++;
     this.run.nests++;
-    const st = deriveStats(this.profile);
-    const items = rollLoot(n.mother ? 'cofre' : 'militar', lvl, this.profile);
-    if (Math.random() < 0.5) items.push(randomWeapon(this.profile.cls, lvl, st.luck, 2, 1));
-    items.forEach((it) => this.dropItem(it, n.x, n.z, 3));
+    if (auth.on) {
+      if (this.coop && this.coop.isHost) net.broadcast({ k: 'xp', nest: 1, mother: n.mother ? 1 : 0 });
+      this.claim({ kind: 'nest', mother: n.mother }, n.x, n.z, 3);
+    } else {
+      this.sharedXp(Math.round((n.mother ? 700 : 160) * (1 + 0.25 * (lvl - 1))));
+      this.profile.stats.nests++;
+      const st = deriveStats(this.profile);
+      const items = rollLoot(n.mother ? 'cofre' : 'militar', lvl, this.profile);
+      if (Math.random() < 0.5) items.push(randomWeapon(this.profile.cls, lvl, st.luck, 2, 1));
+      items.forEach((it) => this.dropItem(it, n.x, n.z, 3));
+    }
     const left = this.world.nests.filter((x) => !x.mother && x.alive).length;
     const total = this.world.nests.length - 1;
     if (!n.mother) {
@@ -407,6 +413,14 @@ export class Game {
     const m = this.world.mother;
     const chestPos = this.world.walkableNear(m.x, m.z, 6) || { x: m.x, z: m.z + 6 };
     this.world.addTreasure(chestPos.x, chestPos.z);
+    if (auth.on) {
+      if (this.coop) net.broadcast({ k: 'cleared', x: chestPos.x, z: chestPos.z, bonus: Math.round(400 * lvl) });
+      sfx.levelup();
+      this.claim({ kind: 'clear' }).then((r) => {
+        if (r && !this.ended) this.sharedBanner('ZONA LIMPA!', 'clear', `+$${r.money} · Tesouro da Colmeia revelado · Extraia no acampamento`);
+      });
+      return;
+    }
     const bonus = Math.round(400 * lvl * deriveStats(this.profile).moneyMult);
     this.profile.money += bonus;
     if (!this.profile.cleared.includes(this.mapDef.id)) this.profile.cleared.push(this.mapDef.id);
@@ -486,8 +500,17 @@ export class Game {
     if (this.coop && this.coop.isClient) {
       this.world.markLooted(c);
       this.run.looted++; sfx.loot();
-      net.sendTo(net.room.hostId, { k: 'loot', ci: this.world.containers.indexOf(c), cls: this.profile.cls, sor: this.profile.attrs.sor });
-      this.gainXp(4);
+      const ci = this.world.containers.indexOf(c);
+      net.sendTo(net.room.hostId, { k: 'loot', ci, cls: this.profile.cls, sor: this.profile.attrs.sor, own: auth.on ? 1 : 0 });
+      if (auth.on) this.claim({ kind: 'loot', ctype: c.type, idx: ci }, c.x, c.z, 1.6, true);
+      else this.gainXp(4);
+      return;
+    }
+    if (auth.on) {
+      this.world.markLooted(c);
+      this.run.looted++;
+      sfx.loot();
+      this.claim({ kind: 'loot', ctype: c.type, idx: this.world.containers.indexOf(c) }, c.x, c.z, 1.6, true);
       return;
     }
     const items = c.type === 'tesouro' ? this.treasureLoot() : rollLoot(c.type, this.mapDef.level, this.profile);
@@ -554,10 +577,33 @@ export class Game {
   }
 
   // ---------- Progressão ----------
+  // Com servidor: pede o evento; o servidor devolve XP, nível e itens oficiais.
+  // Itens caem no chão em (x, z) ou vão direto para a mochila (toBag).
+  claim(body, x, z, spread = 1, toBag = false) {
+    return auth.claim(this.profile, body).then((r) => {
+      if (this.disposed) return r;
+      if (r.xp) this.run.xp += r.xp;
+      if (r.levels > 0) this.onLevelUp(r.levels); else this.hud.refreshXp();
+      const max = this.player.stats.bagSlots;
+      for (const it of r.items || []) {
+        if (toBag && addToBag(this.bag, it, max)) this.announceItem(it);
+        else if (x !== undefined) this.dropItem(it, x, z, spread);
+      }
+      if (toBag) this.hud.refreshBag();
+      return r;
+    }).catch((e) => { if (e.status !== 409) console.warn('servidor recusou:', body.kind, e.message); return null; });
+  }
+
   gainXp(n) {
+    if (auth.on) return; // XP só vem do servidor
     const lv = grantXp(this.profile, n);
     this.run.xp += n;
-    if (lv > 0) {
+    if (lv > 0) this.onLevelUp(lv);
+    this.hud.refreshXp();
+  }
+
+  onLevelUp(lv) {
+    {
       this.player.refreshStats();
       this.player.heal(this.player.stats.maxHp * 0.3);
       this.hud.banner(`NÍVEL ${this.profile.level}!`, 'level', `+${lv * 3} pontos de atributo — abra a mochila (Tab)`);
@@ -570,6 +616,7 @@ export class Game {
 
   onZombieKilled(z, opts) {
     const lvl = this.mapDef.level;
+    if (auth.on) return this.onZombieKilledAuth(z, opts);
     const xp = Math.round(z.T.xp * z.R.xp * (1 + 0.2 * (lvl - 1)));
     if (opts && opts.fromPeer) net.sendTo(opts.fromPeer, { k: 'xp', a: xp, kill: 1 });
     else {
@@ -594,6 +641,25 @@ export class Game {
     }
   }
 
+  onZombieKilledAuth(z, opts) {
+    const peer = opts && opts.fromPeer;
+    // quem abateu ganha o XP; o anfitrião (dono do mundo) sorteia os drops
+    if (peer) net.sendTo(peer, { k: 'xp', kill: 1, type: z.type, rank: z.rank });
+    else this.run.kills++;
+    this.claim({ kind: 'kill', type: z.type, rank: z.rank, xp: !peer }, z.pos.x, z.pos.z, z.rank === 'normal' ? 0.5 : z.rank === 'boss' ? 3 : 2);
+    if (z.rank === 'miniboss') {
+      this.sharedBanner('MINI-BOSS DERROTADO', 'good', z.name);
+      if (this.coop) net.broadcast({ k: 'xp', assist: 'miniboss', type: z.type, except: peer || null });
+    }
+    if (z.rank === 'boss') {
+      this.bossDead = true;
+      this.hud.showBoss(null);
+      this.sharedBanner(`${z.name.toUpperCase()} CAIU`, 'good', this.world.mother.alive ? 'Agora destrua a Colmeia Mãe!' : '');
+      if (this.coop) net.broadcast({ k: 'xp', assist: 'boss', type: z.type, except: peer || null });
+      this.checkCleared();
+    }
+  }
+
   onBossAwake(z) {
     this.bossAwake = true;
     sfx.boss();
@@ -606,8 +672,8 @@ export class Game {
   onPlayerDeath() {
     if (this.ended) return;
     this.ended = 'death';
-    this.profile.stats.deaths++;
-    saveProfile(this.profile);
+    if (auth.on) auth.end(this.profile, 'death');
+    else { this.profile.stats.deaths++; saveProfile(this.profile); }
     setTimeout(() => this.hud.showEnd('death'), 1400);
   }
 
@@ -616,9 +682,11 @@ export class Game {
     this.ended = kind;
     if (kind === 'extract' || kind === 'hostleft') {
       mergeInto(this.profile.stash, this.bag);
-      this.profile.stats.extracted++;
+      if (!auth.on) this.profile.stats.extracted++;
     }
-    saveProfile(this.profile);
+    // com servidor: ele confere a mochila (só aceita itens que emitiu) e devolve o perfil oficial
+    if (auth.on) auth.end(this.profile, kind === 'extract' || kind === 'hostleft' ? 'extract' : 'quit').then(() => saveProfile(this.profile));
+    else saveProfile(this.profile);
     if (this.coop && kind === 'extract') {
       net.updateInfo(playerInfo(this.profile));
       if (this.coop.isHost && !fromHost) net.broadcast({ k: 'extracted' });
@@ -634,6 +702,7 @@ export class Game {
   }
   sharedXp(a) {
     this.gainXp(a);
+    if (auth.on) return;
     if (this.coop && this.coop.isHost) net.broadcast({ k: 'xp', a });
   }
   inSafe(pos) {
@@ -783,6 +852,7 @@ export class Game {
   }
 
   dispose() {
+    this.disposed = true;
     this.setGamePresence(false);
     if (this.coop) this.coop.dispose();
     if (this.touch) this.touch.dispose();

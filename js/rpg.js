@@ -19,11 +19,12 @@ export async function initStore() {
     let list = await r.json();
     store.mode = 'server';
     reportClient();
-    // migra personagens antigos deste navegador para a sessão (uma vez)
+    // migra personagens antigos deste navegador para a sessão (uma vez).
+    // O servidor recria cada um no nível 1 (progresso local não é confiável).
     if (!list.length && !localStorage.getItem('zonamorta.migrated')) {
       const old = JSON.parse(localStorage.getItem(KEY) || '[]');
       for (const p of old) await fetch('/api/profiles/' + p.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
-      if (old.length) list = old;
+      if (old.length) list = await (await fetch('/api/profiles', { cache: 'no-store', credentials: 'same-origin' })).json();
       localStorage.setItem('zonamorta.migrated', '1');
     }
     store.cache = list.map(migrateProfile);
@@ -43,14 +44,41 @@ export async function restoreSession(sid) {
   if (!r.ok) throw new Error((await r.json()).error || 'falhou');
   return initStore();
 }
-function pushSave(p, keepalive = false) {
-  return fetch('/api/profiles/' + p.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p), keepalive }).catch(() => {});
+// O servidor devolve a versão oficial do perfil (ele recusa XP, dinheiro e
+// itens que não emitiu). Ela é aplicada no MESMO objeto em uso pelo jogo.
+const OFFICIAL = ['level', 'xp', 'money', 'stats', 'cleared', 'points', 'sp'];
+export function adoptProfile(p, server, full = true) {
+  if (!server || server.id !== p.id) return p;
+  for (const k of OFFICIAL) p[k] = server[k];
+  if (full) for (const k of Object.keys(server)) if (!OFFICIAL.includes(k)) p[k] = server[k];
+  const i = store.cache.findIndex((x) => x.id === p.id);
+  if (i >= 0 && store.cache[i] !== p) store.cache[i] = p;
+  return p;
 }
-export function flushSaves() {
+const inflight = new Set();
+function pushSave(p, keepalive = false) {
+  const body = JSON.stringify(p);
+  const job = fetch('/api/profiles/' + p.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: keepalive && body.length < 60000 })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((r) => {
+      // só substitui tudo se nada mudou localmente depois do envio
+      if (r && r.profile) adoptProfile(p, r.profile, !store.pending.has(p.id) && JSON.stringify(p) === body);
+    })
+    .catch(() => {})
+    .finally(() => inflight.delete(job));
+  inflight.add(job);
+  return job;
+}
+export function flushSaves(keepalive = true) {
   if (store.mode !== 'server') return;
   clearTimeout(store.timer);
-  for (const p of store.pending.values()) pushSave(p, true);
+  for (const p of store.pending.values()) pushSave(p, keepalive);
   store.pending.clear();
+}
+// espera os salvamentos pendentes chegarem ao servidor (ex.: antes de abrir uma partida)
+export async function savesSettled() {
+  flushSaves(false);
+  await Promise.all([...inflight]);
 }
 export function listProfiles() {
   if (store.mode === 'server') return store.cache;
@@ -63,6 +91,7 @@ export function saveProfile(p) {
   if (store.mode === 'server') {
     const i = store.cache.findIndex((x) => x.id === p.id);
     if (i >= 0) store.cache[i] = p; else store.cache.push(p);
+    if (i < 0) { pushSave(p); return; } // personagem novo: o servidor cria na hora
     store.pending.set(p.id, p);
     clearTimeout(store.timer);
     store.timer = setTimeout(() => { for (const q of store.pending.values()) pushSave(q); store.pending.clear(); }, 400);

@@ -13,11 +13,22 @@ const path = require('path');
 const crypto = require('crypto');
 const net = require('net');
 const mysql = require('mysql2/promise');
+const A = require('./authority.js');
 
 const root = __dirname;
 const port = Number(process.env.PORT) || 5173;
 const dataDir = path.join(root, 'data', 'sessions');
 fs.mkdirSync(dataDir, { recursive: true });
+// segredo para assinar códigos de exportação (fica fora do repositório)
+const SECRET = (() => {
+  if (process.env.DEADZONE_SECRET && process.env.DEADZONE_SECRET.length >= 32) return process.env.DEADZONE_SECRET;
+  const f = path.join(root, 'data', 'secret.key');
+  try { return fs.readFileSync(f, 'utf8').trim(); } catch {}
+  const s = crypto.randomBytes(32).toString('hex');
+  fs.writeFileSync(f, s, { mode: 0o600 });
+  return s;
+})();
+const RUNS_FILE = path.join(root, 'data', 'runs.json');
 const dbPool = process.env.DB_NAME ? mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT) || 3306,
@@ -135,11 +146,121 @@ async function purgeOldIps() {
   if (!dbPool) return;
   await dbPool.execute('UPDATE dz_session_events SET ip = NULL, user_agent = NULL WHERE ip IS NOT NULL AND created_at < UTC_TIMESTAMP() - INTERVAL ? DAY', [IP_RETENTION_DAYS]);
   await dbPool.execute('UPDATE dz_sessions SET first_ip = NULL, last_ip = NULL WHERE (first_ip IS NOT NULL OR last_ip IS NOT NULL) AND last_seen_at < UTC_TIMESTAMP() - INTERVAL ? DAY', [IP_RETENTION_DAYS]);
+  await dbPool.execute('UPDATE dz_session_devices SET last_ip = NULL, user_agent = NULL WHERE last_ip IS NOT NULL AND last_seen_at < UTC_TIMESTAMP() - INTERVAL ? DAY', [IP_RETENTION_DAYS]).catch(() => {});
 }
 if (dbPool) {
   const purge = () => purgeOldIps().catch((e) => console.error('Deadzone IP retention error:', e.message));
   setTimeout(purge, 30 * 1000).unref();
   setInterval(purge, 6 * 60 * 60 * 1000).unref();
+}
+
+// ---------- identificação obrigatória (e-mail ou telefone) ----------
+const CONSENT_VERSION = '2026-11';
+const identities = new Map(); // sid -> { type, value } (cache)
+function normContact(raw) {
+  const s = String(raw ?? '').trim();
+  if (s.includes('@')) {
+    const e = s.toLowerCase();
+    return e.length <= 190 && /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24}$/.test(e) ? { type: 'email', value: e } : null;
+  }
+  if (!/^[\d\s()+.-]{8,24}$/.test(s)) return null;
+  const digits = s.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) return null;
+  // sem DDI e com 10–11 dígitos: número brasileiro (+55)
+  const full = s.startsWith('+') ? digits : digits.length <= 11 ? '55' + digits : digits;
+  if (full.startsWith('55') && !/^55[1-9]{2}9?\d{8}$/.test(full)) return null;
+  return { type: 'phone', value: '+' + full };
+}
+function maskContact(c) {
+  if (!c) return null;
+  if (c.type === 'email') { const [u, d] = c.value.split('@'); return u.slice(0, 2) + '***@' + d; }
+  return c.value.slice(0, 3) + ' ••••• ' + c.value.slice(-4);
+}
+async function getIdentity(sid) {
+  if (identities.has(sid)) return identities.get(sid);
+  let id = null;
+  if (!dbPool) id = loadSession(sid).contact || null;
+  else {
+    const [rows] = await dbPool.execute('SELECT contact_type, contact_value FROM dz_sessions WHERE session_id = ? AND consent_at IS NOT NULL', [sid]);
+    if (rows[0] && rows[0].contact_value) id = { type: rows[0].contact_type, value: rows[0].contact_value };
+  }
+  if (id) { if (identities.size > 50000) identities.clear(); identities.set(sid, id); }
+  return id;
+}
+async function setIdentity(sid, c, req) {
+  if (!dbPool) { const d = loadSession(sid); d.contact = { ...c, at: Date.now(), consent: CONSENT_VERSION }; saveSession(sid, d); }
+  else {
+    await dbPool.execute(`UPDATE dz_sessions SET contact_type = ?, contact_value = ?, contact_at = UTC_TIMESTAMP(), consent_at = UTC_TIMESTAMP(), consent_version = ?
+      WHERE session_id = ?`, [c.type, c.value, CONSENT_VERSION, sid]);
+    await addEvent(sid, 'identify', requestInfo(req), 0);
+  }
+  identities.set(sid, c);
+}
+async function requireIdentity(sid) {
+  if (!await getIdentity(sid)) throw new HttpError(403, 'Informe seu e-mail ou telefone para jogar.');
+}
+
+// ---------- aparelho usado (navegador, sistema, tela, GPU, rede...) ----------
+// Os dados vêm do navegador (com aviso na tela de identificação) + cabeçalhos HTTP.
+function cleanValue(v, depth = 0) {
+  if (v === null || typeof v === 'boolean') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null;
+  if (typeof v === 'string') return v.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 300);
+  if (depth >= 3) return null;
+  if (Array.isArray(v)) return v.slice(0, 30).map((x) => cleanValue(x, depth + 1));
+  if (isObj(v)) {
+    const o = {};
+    for (const k of Object.keys(v).slice(0, 60)) if (/^[\w.-]{1,40}$/.test(k)) o[k] = cleanValue(v[k], depth + 1);
+    return o;
+  }
+  return null;
+}
+function parseUa(ua, d) {
+  const hint = isObj(d.uaData) ? d.uaData : {};
+  let os = null, osv = null, br = null, brv = null;
+  if (/Android/i.test(ua)) { os = 'Android'; osv = (ua.match(/Android ([\d.]+)/) || [])[1]; }
+  else if (/iPhone|iPad|iPod/.test(ua)) { os = 'iOS'; osv = ((ua.match(/OS ([\d_]+)/) || [])[1] || '').replace(/_/g, '.'); }
+  else if (/Windows NT/.test(ua)) { os = 'Windows'; osv = (ua.match(/Windows NT ([\d.]+)/) || [])[1]; }
+  else if (/Mac OS X/.test(ua)) { os = 'macOS'; osv = ((ua.match(/Mac OS X ([\d_.]+)/) || [])[1] || '').replace(/_/g, '.'); }
+  else if (/CrOS/.test(ua)) os = 'ChromeOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  if (typeof hint.platform === 'string' && hint.platform) os = hint.platform;
+  if (typeof hint.platformVersion === 'string' && hint.platformVersion) osv = hint.platformVersion;
+  const m = ua.match(/(Edg|OPR|SamsungBrowser|Firefox|FxiOS|CriOS|Chrome|Version)\/([\d.]+)/);
+  if (m) { br = { Edg: 'Edge', OPR: 'Opera', SamsungBrowser: 'Samsung Internet', FxiOS: 'Firefox', CriOS: 'Chrome', Version: /Safari/.test(ua) ? 'Safari' : 'Navegador' }[m[1]] || m[1]; brv = m[2]; }
+  const mobile = hint.mobile === true || /Mobi|Android|iPhone/i.test(ua);
+  const tablet = /iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua));
+  return { os, osv, br, brv, kind: tablet ? 'tablet' : mobile ? 'mobile' : 'desktop', model: typeof hint.model === 'string' && hint.model ? hint.model : null };
+}
+async function saveDevice(sid, raw, req) {
+  const d = cleanValue(raw) || {};
+  const info = requestInfo(req);
+  const ua = String(req.headers['user-agent'] || '').slice(0, 400);
+  const hdr = {};
+  for (const h of ['sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform', 'accept-language', 'cf-ipcountry', 'dnt', 'sec-gpc', 'referer']) if (req.headers[h]) hdr[h] = String(req.headers[h]).slice(0, 200);
+  d.server = { ip: info.ip, country: info.country, region: info.region, city: info.city, headers: hdr, at: new Date().toISOString() };
+  const u = parseUa(ua, d);
+  const scr = isObj(d.screen) ? `${d.screen.w}x${d.screen.h}@${d.screen.dpr}` : null;
+  const gpu = typeof d.gpu === 'string' ? d.gpu.slice(0, 200) : null;
+  const fp = crypto.createHash('sha256').update(JSON.stringify([ua, u.model, gpu, scr, d.cores, d.memory, d.tz, d.platform])).digest('hex');
+  if (!dbPool) {
+    const data = loadSession(sid);
+    data.devices = (data.devices || []).filter((x) => x.fp !== fp).slice(-9);
+    data.devices.push({ fp, ...u, gpu, screen: scr, at: Date.now(), data: d });
+    saveSession(sid, data);
+    return;
+  }
+  const conn = isObj(d.net) ? [d.net.type, d.net.downlink && d.net.downlink + 'Mb/s'].filter(Boolean).join(' ') : null;
+  await dbPool.execute(`INSERT INTO dz_session_devices (session_id, fingerprint, device_kind, os_name, os_version, browser_name, browser_version, device_model, gpu, screen,
+      cpu_cores, memory_gb, timezone, language, connection, last_ip, geo_country, geo_region, geo_city, user_agent, device_json, first_seen_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+    ON DUPLICATE KEY UPDATE device_kind=VALUES(device_kind), os_version=VALUES(os_version), browser_version=VALUES(browser_version), connection=VALUES(connection),
+      last_ip=VALUES(last_ip), geo_country=VALUES(geo_country), geo_region=VALUES(geo_region), geo_city=VALUES(geo_city), user_agent=VALUES(user_agent),
+      device_json=VALUES(device_json), seen_count=seen_count+1, last_seen_at=UTC_TIMESTAMP()`,
+  [sid, fp, u.kind, clip(u.os, 40), clip(u.osv, 40), clip(u.br, 40), clip(u.brv, 40), clip(u.model, 80), gpu, clip(scr, 40),
+    Number.isInteger(d.cores) ? Math.min(d.cores, 1024) : null, typeof d.memory === 'number' ? Math.min(d.memory, 999) : null,
+    clip(d.tz, 64), clip(d.lang, 35), clip(conn, 40), info.ip, info.country, info.region, info.city, ua || null, JSON.stringify(d)]);
+  await dbPool.execute('UPDATE dz_sessions SET device_count = (SELECT COUNT(*) FROM dz_session_devices WHERE session_id = ?) WHERE session_id = ?', [sid, sid]);
 }
 
 async function updateGamePresence(sid, active, req) {
@@ -155,9 +276,14 @@ async function updateGamePresence(sid, active, req) {
   if (!active && wasActive) await addEvent(sid, 'game_end', requestInfo(req), 1);
 }
 async function listProfiles(sid) {
-  if (!dbPool) return loadSession(sid).profiles;
-  const [rows] = await dbPool.execute('SELECT profile_json FROM dz_profiles WHERE session_id = ? ORDER BY updated_at DESC', [sid]);
-  return rows.map((row) => typeof row.profile_json === 'string' ? JSON.parse(row.profile_json) : row.profile_json);
+  let list;
+  if (!dbPool) list = loadSession(sid).profiles;
+  else {
+    const [rows] = await dbPool.execute('SELECT profile_json FROM dz_profiles WHERE session_id = ? ORDER BY updated_at DESC', [sid]);
+    list = rows.map((row) => typeof row.profile_json === 'string' ? JSON.parse(row.profile_json) : row.profile_json);
+  }
+  // a versão em memória (partida em andamento) é a mais nova
+  return list.map((p) => { const c = pcache.get(sid + ':' + p.id); return c ? c.p : A.normalize(p); });
 }
 async function saveProfile(sid, p) {
   if (!dbPool) {
@@ -187,34 +313,223 @@ async function saveProfile(sid, p) {
   finally { conn.release(); }
 }
 async function deleteProfile(sid, id) {
+  dropCached(sid, id);
   if (!dbPool) {
     const data = loadSession(sid); data.profiles = data.profiles.filter((x) => x.id !== id); saveSession(sid, data); return;
   }
   await dbPool.execute('DELETE FROM dz_profiles WHERE session_id = ? AND profile_id = ?', [sid, id]);
 }
+
+// ---------- cache de perfis em jogo + trava por perfil ----------
+// Cada mudança de um perfil passa por withLock (uma de cada vez). Durante a
+// partida as gravações no banco são agrupadas (a cada ~2 s).
+const pcache = new Map(); // sid:id -> { p, t, timer }
+const locks = new Map();
+function withLock(key, fn) {
+  const prev = locks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  locks.set(key, tail);
+  tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
+  return run;
+}
+async function fetchProfile(sid, id) {
+  if (!dbPool) return loadSession(sid).profiles.find((x) => x.id === id) || null;
+  const [rows] = await dbPool.execute('SELECT profile_json FROM dz_profiles WHERE session_id = ? AND profile_id = ? LIMIT 1', [sid, id]);
+  if (!rows.length) return null;
+  return typeof rows[0].profile_json === 'string' ? JSON.parse(rows[0].profile_json) : rows[0].profile_json;
+}
+async function loadProfile(sid, id) {
+  const c = pcache.get(sid + ':' + id);
+  if (c) { c.t = Date.now(); return c.p; }
+  const p = await fetchProfile(sid, id);
+  if (p) { A.normalize(p); pcache.set(sid + ':' + id, { p, t: Date.now(), timer: null }); }
+  return p;
+}
+async function storeProfile(sid, p, now = true) {
+  const key = sid + ':' + p.id;
+  let c = pcache.get(key);
+  if (!c) { c = { p, t: Date.now(), timer: null }; pcache.set(key, c); }
+  c.p = p; c.t = Date.now();
+  if (now) {
+    clearTimeout(c.timer); c.timer = null;
+    return saveProfile(sid, p);
+  }
+  if (!c.timer) c.timer = setTimeout(() => { c.timer = null; withLock(key, () => saveProfile(sid, c.p)).catch((e) => console.error('Deadzone save error:', e.message)); }, 2000);
+  return true;
+}
+function dropCached(sid, id) {
+  const c = pcache.get(sid + ':' + id);
+  if (c) clearTimeout(c.timer);
+  pcache.delete(sid + ':' + id);
+}
+async function flushAll() {
+  const jobs = [];
+  for (const [key, c] of pcache) if (c.timer) {
+    clearTimeout(c.timer); c.timer = null;
+    jobs.push(saveProfile(key.split(':')[0], c.p).catch((e) => console.error('Deadzone flush error:', e.message)));
+  }
+  await Promise.all(jobs);
+}
+setInterval(() => { // libera perfis parados da memória
+  const now = Date.now();
+  for (const [key, c] of pcache) if (!c.timer && now - c.t > 20 * 60 * 1000) pcache.delete(key);
+}, 60 * 1000).unref();
+
+// sessões que estão em alguma sala co-op junto com `sid`
+function peerSids(sid) {
+  const out = new Set([sid]);
+  for (const r of rooms.values()) {
+    const ms = [...r.members.values()];
+    if (ms.some((c) => c.sid === sid)) for (const c of ms) out.add(c.sid);
+  }
+  return out;
+}
+
+// ---------- proteção da API ----------
+const buckets = new Map();
+function rateOk(key, perSec, burst) {
+  const now = Date.now();
+  let b = buckets.get(key);
+  if (!b) { b = { t: burst, last: now }; buckets.set(key, b); }
+  b.t = Math.min(burst, b.t + ((now - b.last) / 1000) * perSec);
+  b.last = now;
+  if (b.t < 1) return false;
+  b.t -= 1;
+  return true;
+}
+setInterval(() => { const now = Date.now(); for (const [k, b] of buckets) if (now - b.last > 10 * 60 * 1000) buckets.delete(k); }, 60 * 1000).unref();
+const EXTRA_ORIGINS = new Set(String(process.env.DEADZONE_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean));
+// bloqueia requisições de outros sites (CSRF) e WebSocket de páginas de terceiros
+function sameOrigin(req) {
+  const o = req.headers.origin;
+  if (!o) return true;
+  try { const u = new URL(o); return u.host === req.headers.host || EXTRA_ORIGINS.has(u.origin); } catch { return false; }
+}
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'same-origin',
+  'X-Frame-Options': 'DENY',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+};
+function csp(req) {
+  const host = String(req.headers.host || '').replace(/[^\w.:-]/g, '');
+  // static.cloudflareinsights.com / cloudflareinsights.com: estatísticas do Cloudflare (injetadas pelo proxy)
+  return ["default-src 'self'", "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://static.cloudflareinsights.com", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:", "img-src 'self' data: blob:", "media-src 'self' data: blob:",
+    `connect-src 'self' wss://${host} ws://${host} https://cdn.jsdelivr.net https://cloudflareinsights.com`, "worker-src 'self' blob:", "frame-src 'self'",
+    "frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"].join('; ');
+}
+const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+const PID_RE = /^[a-z0-9]{4,40}$/i;
+function parseJson(s) { const v = JSON.parse(s || '{}'); if (!isObj(v)) throw new Error('corpo inválido'); return v; }
 function readBody(req, limit = 2 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new Error('muito grande')); req.destroy(); } else chunks.push(c); });
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new HttpError(413, 'conteúdo grande demais')); req.destroy(); } else chunks.push(c); });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
 function json(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.writeHead(code, { ...SEC_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
 }
+class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
 async function api(req, res, url) {
+  const ip = clientIp(req) || 'x';
+  if (!rateOk('api:' + ip, 40, 160)) return json(res, 429, { error: 'Muitas requisições. Aguarde um instante.' });
+  if (req.method !== 'GET' && !sameOrigin(req)) return json(res, 403, { error: 'origem não permitida' });
   const sid = sessionOf(req, res);
   const parts = url.pathname.split('/').filter(Boolean); // api, ...
   try {
+    // ----- partida: o servidor decide XP, loot, dinheiro e progresso -----
+    if (parts[1] === 'runs' && req.method === 'POST') {
+      const body = parseJson(await readBody(req, parts[2] === 'end' ? 1024 * 1024 : 4096));
+      if (!parts[2]) { // começa uma partida
+        if (!PID_RE.test(body.profileId || '')) return json(res, 400, { error: 'perfil inválido' });
+        await requireIdentity(sid); // sem e-mail/telefone não joga
+        return json(res, 200, await withLock(sid + ':' + body.profileId, async () => {
+          const p = await loadProfile(sid, body.profileId);
+          if (!p) throw new HttpError(404, 'personagem não encontrado');
+          let run;
+          try { run = A.startRun(sid, p, String(body.map || ''), body.guest === true); } catch (e) { throw new HttpError(422, e.message); }
+          await storeProfile(sid, p, false);
+          return { runId: run.id, state: A.summary(p) };
+        }));
+      }
+      if (!rateOk('claim:' + sid, 30, 90)) return json(res, 429, { error: 'muitas ações' });
+      const run = A.getRun(sid, body.runId);
+      if (!run) return json(res, 409, { error: 'partida não encontrada' });
+      const key = sid + ':' + run.profileId;
+      if (parts[2] === 'claim') {
+        return json(res, 200, await withLock(key, async () => {
+          const p = await loadProfile(sid, run.profileId);
+          if (!p) throw new HttpError(404, 'personagem não encontrado');
+          let out;
+          try { out = A.claim(run, p, body); } catch (e) { throw new HttpError(422, e.message); }
+          await storeProfile(sid, p, false);
+          return out;
+        }));
+      }
+      if (parts[2] === 'end') { // extração / morte / saída
+        const kind = ['extract', 'death', 'quit'].includes(body.kind) ? body.kind : 'quit';
+        return json(res, 200, await withLock(key, async () => {
+          const old = await loadProfile(sid, run.profileId);
+          if (!old) throw new HttpError(404, 'personagem não encontrado');
+          const p = isObj(body.profile) && body.profile.id === old.id ? A.reconcile(old, body.profile, kind === 'death' ? null : run) : old;
+          A.endRun(run, p, kind);
+          await storeProfile(sid, p, true);
+          return { profile: p };
+        }));
+      }
+      return json(res, 404, { error: 'não encontrado' });
+    }
+    // ----- mercado do acampamento -----
+    if (parts[1] === 'shop' && req.method === 'POST' && (parts[2] === 'buy' || parts[2] === 'sell')) {
+      const body = parseJson(await readBody(req, 64 * 1024));
+      if (!PID_RE.test(body.profileId || '')) return json(res, 400, { error: 'perfil inválido' });
+      if (!rateOk('shop:' + sid, 6, 20)) return json(res, 429, { error: 'muitas compras seguidas' });
+      return json(res, 200, await withLock(sid + ':' + body.profileId, async () => {
+        const p = await loadProfile(sid, body.profileId);
+        if (!p) throw new HttpError(404, 'personagem não encontrado');
+        let out;
+        try {
+          if (parts[2] === 'buy') out = { got: A.shopBuy(p, String(body.id || '')) };
+          else out = { total: A.sell(p, Array.isArray(body.uids) ? body.uids.map(String).slice(0, 500) : [], body.all === true) };
+        } catch (e) { throw new HttpError(422, e.message); }
+        await storeProfile(sid, p, true);
+        return { ...out, profile: p };
+      }));
+    }
     await touchSession(sid);
     await recordAccess(sid, req).catch((e) => console.error('Deadzone access log error:', e.message));
     if (parts[1] === 'session' && !parts[2] && req.method === 'GET') return json(res, 200, { sid, rooms: rooms.size });
     if (parts[1] === 'session' && parts[2] === 'client' && req.method === 'POST') {
       const body = JSON.parse(await readBody(req, 2048) || '{}');
       await saveClientInfo(sid, body && typeof body === 'object' ? body : {});
+      return json(res, 200, { ok: true });
+    }
+    if (parts[1] === 'identity' && !parts[2]) {
+      if (req.method === 'GET') {
+        const id = await getIdentity(sid);
+        return json(res, 200, { identified: !!id, type: id?.type || null, masked: maskContact(id), consentVersion: CONSENT_VERSION });
+      }
+      if (req.method === 'POST') {
+        if (!rateOk('ident:' + sid, 10 / 3600, 10)) return json(res, 429, { error: 'Muitas tentativas. Tente mais tarde.' });
+        const body = parseJson(await readBody(req, 4096));
+        if (body.consent !== true) return json(res, 400, { error: 'É preciso aceitar o aviso de privacidade.' });
+        const c = normContact(body.contact);
+        if (!c) return json(res, 400, { error: 'Informe um e-mail válido ou um telefone com DDD.' });
+        await setIdentity(sid, c, req);
+        return json(res, 200, { identified: true, type: c.type, masked: maskContact(c) });
+      }
+    }
+    if (parts[1] === 'session' && parts[2] === 'device' && req.method === 'POST') {
+      const body = parseJson(await readBody(req, 32 * 1024));
+      if (rateOk('dev:' + sid, 1 / 120, 4)) await saveDevice(sid, body, req);
       return json(res, 200, { ok: true });
     }
     if (parts[1] === 'game' && parts[2] === 'presence' && req.method === 'POST') {
@@ -247,42 +562,96 @@ async function api(req, res, url) {
     }
     if (parts[1] === 'profiles') {
       if (req.method === 'GET' && !parts[2]) return json(res, 200, await listProfiles(sid));
-      const id = parts[2];
-      if (!id || !/^[a-z0-9]{4,40}$/i.test(id)) return json(res, 400, { error: 'id inválido' });
-      if (req.method === 'PUT') {
-        const p = JSON.parse(await readBody(req));
-        if (!p || p.id !== id || typeof p.name !== 'string') return json(res, 400, { error: 'perfil inválido' });
-        if (!await saveProfile(sid, p)) return json(res, 400, { error: 'limite de personagens' });
-        return json(res, 200, { ok: true });
+      if (parts[2] === 'import' && req.method === 'POST') {
+        const body = parseJson(await readBody(req, 1024 * 1024));
+        let code;
+        try { code = A.readCode(body.code, SECRET); } catch (e) { return json(res, 400, { error: e.message }); }
+        if (!PID_RE.test(code.id)) return json(res, 400, { error: 'Personagem corrompido' });
+        return json(res, 200, await withLock(sid + ':' + code.id, async () => {
+          // o personagem é MOVIDO: existe uma única cópia dele no servidor
+          const here = await loadProfile(sid, code.id);
+          if (here) return { profile: here, moved: false };
+          let p = A.normalize(code);
+          if (dbPool) {
+            const [rows] = await dbPool.execute('SELECT session_id FROM dz_profiles WHERE profile_id = ? LIMIT 1', [code.id]);
+            if (rows.length) {
+              const other = rows[0].session_id;
+              await withLock(other + ':' + code.id, async () => {
+                const cur = await loadProfile(other, code.id);
+                if (cur) p = cur;
+                if (!await saveProfile(sid, p)) throw new HttpError(400, 'limite de personagens');
+                A.currentRun(other, code.id) && A.endRun(A.currentRun(other, code.id), p, 'quit');
+                await deleteProfile(other, code.id);
+              });
+              pcache.set(sid + ':' + p.id, { p, t: Date.now(), timer: null });
+              return { profile: p, moved: true };
+            }
+          }
+          if (!await storeProfile(sid, p, true)) throw new HttpError(400, 'limite de personagens');
+          return { profile: p, moved: false };
+        }));
       }
-      if (req.method === 'DELETE') {
-        await deleteProfile(sid, id);
+      const id = parts[2];
+      if (!id || !PID_RE.test(id)) return json(res, 400, { error: 'id inválido' });
+      if (parts[3] === 'export' && req.method === 'GET') {
+        const p = await withLock(sid + ':' + id, () => loadProfile(sid, id));
+        if (!p) return json(res, 404, { error: 'personagem não encontrado' });
+        return json(res, 200, { code: A.exportCode(p, SECRET) });
+      }
+      if (req.method === 'PUT' && !parts[3]) {
+        const client = parseJson(await readBody(req, 1024 * 1024));
+        if (client.id !== id) return json(res, 400, { error: 'perfil inválido' });
+        return json(res, 200, await withLock(sid + ':' + id, async () => {
+          const old = await loadProfile(sid, id);
+          if (!old) await requireIdentity(sid);
+          // personagem novo nasce no servidor (nível 1, itens iniciais); um existente só aceita mudanças permitidas
+          const p = old ? A.reconcile(old, client, A.currentRun(sid, id)) : A.newProfile(client);
+          if (!p) throw new HttpError(400, 'perfil inválido');
+          if (!await storeProfile(sid, p, true)) { dropCached(sid, id); throw new HttpError(400, 'limite de personagens'); }
+          return { ok: true, profile: p };
+        }));
+      }
+      if (req.method === 'DELETE' && !parts[3]) {
+        await withLock(sid + ':' + id, () => deleteProfile(sid, id));
         return json(res, 200, { ok: true });
       }
     }
     json(res, 404, { error: 'não encontrado' });
-  } catch (e) { json(res, 400, { error: String(e.message || e) }); }
+  } catch (e) {
+    if (e instanceof HttpError) return json(res, e.code, { error: e.message });
+    if (e instanceof SyntaxError) return json(res, 400, { error: 'JSON inválido' });
+    console.error('Deadzone API error:', e);
+    json(res, 500, { error: 'erro interno' });
+  }
 }
 
 // ---------- HTTP ----------
+// Só o que o navegador precisa é público: o código do servidor, dados,
+// dependências e configurações nunca são servidos.
+const PUBLIC_RE = /^\/(?:index\.html|favicon\.ico|(?:js|css|assets|models|sounds)\/[\w\-. /]+)$/;
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://x');
+  let url, p;
+  try { url = new URL(req.url, 'http://x'); p = decodeURIComponent(url.pathname); }
+  catch { res.writeHead(400, SEC_HEADERS); return res.end(); }
   if (url.pathname.startsWith('/api/')) return api(req, res, url);
-  let p = decodeURIComponent(url.pathname);
+  if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC_HEADERS); return res.end(); }
   if (p === '/') p = '/index.html';
-  if (p.startsWith('/data/')) { res.writeHead(403); return res.end(); }
+  if (!PUBLIC_RE.test(p) || p.includes('..') || p.includes('/.')) { res.writeHead(404, SEC_HEADERS); return res.end('404'); }
   const file = path.join(root, path.normalize(p));
-  if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
+  if (!file.startsWith(root + path.sep)) { res.writeHead(403, SEC_HEADERS); return res.end(); }
   fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('404'); }
-    if (p === '/index.html') sessionOf(req, res); // garante cookie de sessão
-    res.writeHead(200, { 'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-    res.end(data);
+    if (err) { res.writeHead(404, SEC_HEADERS); return res.end('404'); }
+    const ext = path.extname(file).toLowerCase();
+    const headers = { ...SEC_HEADERS, 'Content-Type': types[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' };
+    if (ext === '.html') { sessionOf(req, res); headers['Content-Security-Policy'] = csp(req); } // garante cookie de sessão
+    res.writeHead(200, headers);
+    res.end(req.method === 'HEAD' ? undefined : data);
   });
 });
 
 // ---------- WebSocket (RFC 6455, mínimo) ----------
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+const WS_MAX = 1024 * 1024; // maior mensagem aceita (o snapshot do co-op fica bem abaixo)
 let nextId = 1;
 const rooms = new Map(); // código -> { code, host, members: Map<id, client>, map, seed }
 
@@ -304,15 +673,22 @@ function wsClose(c) {
 }
 
 server.on('upgrade', (req, sock) => {
-  if (new URL(req.url, 'http://x').pathname !== '/ws') return sock.destroy();
+  let pathname = '';
+  try { pathname = new URL(req.url, 'http://x').pathname; } catch {}
+  if (pathname !== '/ws' || !sameOrigin(req)) return sock.destroy();
+  if (!rateOk('ws:' + (clientIp(req) || 'x'), 1, 12)) return sock.destroy();
   const key = req.headers['sec-websocket-key'];
-  if (!key) return sock.destroy();
+  if (!key || !/^[A-Za-z0-9+/=]{16,40}$/.test(key)) return sock.destroy();
   const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   sock.setNoDelay(true);
-  const c = { id: nextId++, sock, sid: sessionOf(req, null), room: null, info: null, buf: Buffer.alloc(0), frag: [], closed: false, alive: true };
+  const c = { id: nextId++, sock, sid: sessionOf(req, null), room: null, info: null, buf: Buffer.alloc(0), frag: [], fragLen: 0, closed: false, alive: true, joinFails: [], dropped: 0 };
   touchSession(c.sid).catch((e) => console.error('Deadzone session DB error:', e.message));
-  sock.on('data', (d) => { c.buf = Buffer.concat([c.buf, d]); parseFrames(c); });
+  sock.on('data', (d) => {
+    c.buf = Buffer.concat([c.buf, d]);
+    if (c.buf.length > WS_MAX + 16) return wsClose(c);
+    parseFrames(c);
+  });
   sock.on('close', () => wsClose(c));
   sock.on('error', () => wsClose(c));
   wsSend(c, { t: 'hello', id: c.id });
@@ -325,7 +701,7 @@ function parseFrames(c) {
     let len = b1 & 0x7f, off = 2;
     if (len === 126) { if (c.buf.length < 4) return; len = c.buf.readUInt16BE(2); off = 4; }
     else if (len === 127) { if (c.buf.length < 10) return; len = Number(c.buf.readBigUInt64BE(2)); off = 10; }
-    if (len > 4 * 1024 * 1024) return wsClose(c);
+    if (len > WS_MAX || !masked) return wsClose(c); // cliente sempre mascara (RFC 6455)
     const need = off + (masked ? 4 : 0) + len;
     if (c.buf.length < need) return;
     let data = c.buf.subarray(off + (masked ? 4 : 0), need);
@@ -339,8 +715,14 @@ function parseFrames(c) {
     if (op === 0x9) { c.sock.write(Buffer.concat([Buffer.from([0x8a, data.length]), data])); continue; }
     if (op === 0xa) { c.alive = true; continue; }
     if (op === 0x1 || op === 0x0) {
-      c.frag.push(data);
-      if (fin) { const msg = Buffer.concat(c.frag).toString('utf8'); c.frag = []; onMessage(c, msg); }
+      c.frag.push(data); c.fragLen += data.length;
+      if (c.fragLen > WS_MAX) return wsClose(c);
+      if (fin) {
+        const msg = Buffer.concat(c.frag).toString('utf8'); c.frag = []; c.fragLen = 0;
+        // limite de mensagens por conexão (snapshots ~14/s + ações); excesso é descartado
+        if (!rateOk('wsm:' + c.id, 160, 480)) { if (++c.dropped > 4000) return wsClose(c); continue; }
+        try { onMessage(c, msg); } catch (e) { console.error('Deadzone ws error:', e.message); }
+      }
     }
   }
 }
@@ -370,23 +752,35 @@ function leaveRoom(c) {
   }
 }
 
+const MAP_RE = /^[a-z0-9_-]{1,32}$/i;
 function onMessage(c, raw) {
   let m;
   try { m = JSON.parse(raw); } catch { return; }
+  if (!isObj(m)) return;
   switch (m.t) {
     case 'host': {
+      const info = A.sanitizeInfo(m.info);
+      if (!info || !MAP_RE.test(String(m.map || ''))) return wsSend(c, { t: 'join_error', error: 'Dados de sala inválidos.' });
+      if (rooms.size > 5000) return wsSend(c, { t: 'join_error', error: 'Servidor cheio, tente novamente.' });
       leaveRoom(c);
       const code = roomCode();
-      const r = { code, host: c, members: new Map([[c.id, c]]), map: m.map, seed: m.seed, phase: 'game' };
+      const r = { code, host: c, members: new Map([[c.id, c]]), map: m.map, seed: Number(m.seed) | 0, phase: 'game' };
       c.ready = false;
       rooms.set(code, r);
-      c.room = r; c.info = m.info;
+      c.room = r; c.info = info;
       wsSend(c, { t: 'hosted', code, id: c.id });
       break;
     }
     case 'join': {
+      // evita adivinhar códigos de sala por força bruta
+      const now = Date.now();
+      c.joinFails = c.joinFails.filter((t) => now - t < 60000);
+      if (c.joinFails.length >= 8) return wsSend(c, { t: 'join_error', error: 'Muitas tentativas. Aguarde um minuto.' });
+      const info = A.sanitizeInfo(m.info);
+      if (!info) return wsSend(c, { t: 'join_error', error: 'Dados de jogador inválidos.' });
+      m.info = info;
       const r = rooms.get(String(m.code || '').toUpperCase());
-      if (!r) return wsSend(c, { t: 'join_error', error: 'Sala não encontrada (o anfitrião pode ter saído).' });
+      if (!r) { c.joinFails.push(now); return wsSend(c, { t: 'join_error', error: 'Sala não encontrada (o anfitrião pode ter saído).' }); }
       if (r.phase === 'game' && r.members.size >= 4) return wsSend(c, { t: 'join_error', error: 'Sala cheia (máx. 4 jogadores).' });
       if (r.members.size >= 4) return wsSend(c, { t: 'join_error', error: 'Sala cheia (máx. 4 jogadores).' });
       leaveRoom(c);
@@ -409,7 +803,7 @@ function onMessage(c, raw) {
       const r = c.room;
       if (!r || c !== r.host || r.phase !== 'lobby') break;
       const state = roomState(r);
-      if (!state.allReady || typeof m.map !== 'string' || !/^[a-z0-9_-]{1,32}$/i.test(m.map)) { wsSend(c, { t: 'start_error', error: 'Todos precisam estar prontos.' }); break; }
+      if (!state.allReady || typeof m.map !== 'string' || !MAP_RE.test(m.map)) { wsSend(c, { t: 'start_error', error: 'Todos precisam estar prontos.' }); break; }
       r.phase = 'game'; r.map = m.map; r.seed = Number(m.seed) | 0;
       for (const p of r.members.values()) p.ready = false;
       for (const x of r.members.values()) if (x !== c) wsSend(x, { t: 'start_game', code: r.code, map: r.map, seed: r.seed, hostId: r.host.id, peers: [...r.members.values()].filter((p) => p !== x).map((p) => ({ id: p.id, info: p.info })) });
@@ -422,11 +816,14 @@ function onMessage(c, raw) {
     case 'to': // mensagem direta
       if (c.room) { const x = c.room.members.get(m.to); if (x) wsSend(x, { t: 'm', from: c.id, d: m.d }); }
       break;
-    case 'info':
-      c.info = m.info;
+    case 'info': {
+      const info = A.sanitizeInfo(m.info);
+      if (!info) break;
+      c.info = info;
       if (c.room) for (const x of c.room.members.values()) if (x !== c) wsSend(x, { t: 'peer_info', id: c.id, info: c.info });
       if (c.room) sendRoomState(c.room);
       break;
+    }
   }
 }
 
@@ -439,7 +836,25 @@ setInterval(() => {
   }
 }, 25000);
 
+// Ao parar (deploy/reinício): grava perfis pendentes e as partidas em andamento
+let stopping = false;
+async function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  try { fs.writeFileSync(RUNS_FILE, JSON.stringify({ at: Date.now(), runs: A.dumpRuns() })); } catch (e) { console.error('Deadzone runs dump error:', e.message); }
+  await flushAll();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
 async function start() {
+  await A.init({ peerSids });
+  try {
+    const saved = JSON.parse(fs.readFileSync(RUNS_FILE, 'utf8'));
+    if (Date.now() - saved.at < 30 * 60 * 1000) A.loadRuns(saved.runs);
+    fs.unlinkSync(RUNS_FILE);
+  } catch {}
   if (dbPool) await dbPool.query('SELECT 1');
   server.listen(port, '127.0.0.1', () => {
     console.log(`Zona Morta rodando em http://localhost:${port}${dbPool ? ' · MySQL conectado' : ' · armazenamento local'}`);

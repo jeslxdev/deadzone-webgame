@@ -310,6 +310,21 @@ body:not([data-screen="game"]) #toasts { top: 70px; }
 .feedback-close{position:absolute;top:10px;right:12px;border:0;color:#ddd;background:none;font-size:24px;cursor:pointer}
 .feedback-card [type=submit]:disabled{opacity:.65}
 
+/* Identificação obrigatória (e-mail/telefone) */
+.id-gate{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:16px;overflow:auto;background:radial-gradient(ellipse at 50% 30%,#2a1712 0%,#0b0908 70%)}
+.id-card{width:min(470px,100%);display:grid;gap:12px;padding:26px 24px;border:1px solid #756548;border-radius:12px;color:#eee7da;background:#211f1dee;box-shadow:0 20px 70px #000c;font:500 16px var(--font);user-select:text}
+.id-card .logo{margin:0;text-align:center;font-size:40px}
+.id-card h2{margin:0;font-family:var(--title);font-weight:400;font-size:20px;letter-spacing:.5px;color:var(--gold)}
+.id-card p{margin:0;color:#b7afa3}
+.id-card label{display:grid;gap:5px}
+.id-card input[name=contact]{width:100%;padding:12px;border:1px solid #554f47;border-radius:6px;color:#f4eee4;background:#302d29;font:inherit;font-size:17px}
+.id-card .id-consent{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.id-card .id-consent input{margin-top:4px;width:18px;height:18px}
+.id-privacy{font-size:14px;color:#b7afa3}.id-privacy summary{cursor:pointer;color:#e9e2d8}.id-privacy p{margin-top:8px;line-height:1.35}
+.id-error{min-height:20px;color:#ff8a6a}
+.id-card [type=submit]:disabled{opacity:.65}
+body:has(.id-gate) .feedback-launch{display:none}
+
 /* ============================================================
    CELULAR — controles de toque e layout responsivo
    ============================================================ */

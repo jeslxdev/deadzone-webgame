@@ -12,6 +12,22 @@ import { addXraySilhouette, markCharacterOrder } from './occlusion.js';
 import { Zombie } from './zombies.js';
 import { rollLoot, randomWeapon, addToBag, itemInfo, saveProfile } from './rpg.js';
 import { net } from './net.js';
+import { auth } from './auth.js';
+
+// Limites para dano enviado por convidados (evita "one-shot" vindo de um cliente alterado)
+const MAX_HIT = 2500, MAX_DPS = 9000;
+function capDamage(state, from, dmg) {
+  dmg = Number(dmg);
+  if (!Number.isFinite(dmg) || dmg <= 0) return 0;
+  const now = performance.now() / 1000;
+  const b = state.get(from) || { t: now, budget: MAX_DPS };
+  b.budget = Math.min(MAX_DPS * 2, b.budget + (now - b.t) * MAX_DPS); b.t = now;
+  dmg = Math.min(dmg, MAX_HIT, b.budget);
+  b.budget -= dmg;
+  state.set(from, b);
+  return dmg;
+}
+const dmgState = new Map();
 import { sfx } from './audio.js';
 import { toast } from './ui.js';
 import { icon } from './icons.js';
@@ -226,13 +242,15 @@ export class Coop {
       // ----- recebidas pelo anfitrião -----
       case 'hit': if (this.isHost) {
         const zb = g.zombies.find((z) => z.nid === d.id);
-        if (zb && !zb.dead) zb.takeDamage(d.dmg, { crit: d.crit, kx: d.kx, kz: d.kz, stun: d.stun, melee: d.melee, heavy: d.heavy, fromPeer: from });
+        const dmg = capDamage(dmgState, from, d.dmg);
+        if (zb && !zb.dead && dmg > 0) zb.takeDamage(dmg, { crit: d.crit, kx: d.kx, kz: d.kz, stun: d.stun, melee: d.melee, heavy: d.heavy, fromPeer: from });
         break;
       }
       case 'extract_req': if (this.isHost && !g.ended) { g.endRun('extract'); break; }
-      case 'nhit': if (this.isHost) { const n = g.world.nests[d.i]; if (n) g.damageNest(n, d.dmg, d.crit, from); break; }
+      case 'nhit': if (this.isHost) { const n = g.world.nests[d.i]; const dmg = capDamage(dmgState, from, d.dmg); if (n && dmg > 0) g.damageNest(n, dmg, d.crit, from); break; }
       case 'loot': if (this.isHost) {
         const c = g.world.containers[d.ci];
+        if (d.own) { if (c && !c.looted) g.world.markLooted(c); break; } // o convidado pede o loot ao servidor
         if (!c || c.looted) { net.sendTo(from, { k: 'items', items: [], msg: 'Já foi saqueado' }); break; }
         g.world.markLooted(c);
         const fake = { cls: d.cls, attrs: { for: 0, agi: 0, vit: 0, pre: 0, sor: d.sor || 0 }, level: 1 };
@@ -246,7 +264,7 @@ export class Coop {
         if (i < 0) break;
         const dr = g.drops[i];
         g.scene.remove(dr.mesh); g.drops.splice(i, 1);
-        net.sendTo(from, { k: 'items', items: [dr.item] });
+        net.sendTo(from, { k: 'items', items: [dr.item], pick: 1 });
         break;
       }
       // ----- recebidas pelos convidados -----
@@ -255,12 +273,28 @@ export class Coop {
       case 'dmg': g.player.takeDamage(d.a, null); break;
       case 'kn': g.player.knock(d.x, d.z); break;
       case 'xp':
-        g.gainXp(d.a);
+        if (auth.on) { // o servidor confere cada evento na partida deste jogador
+          if (d.kill) { g.run.kills++; g.claim({ kind: 'kill', type: d.type, rank: d.rank, drops: false }); }
+          else if (d.assist && d.except !== net.id) g.claim({ kind: 'assist', rank: d.assist, type: d.type });
+          else if (d.nest) g.claim({ kind: 'nest', mother: !!d.mother, drops: false });
+          break;
+        }
+        if (typeof d.a === 'number') g.gainXp(d.a);
         if (d.kill) { g.run.kills++; g.profile.stats.kills++; }
         break;
       case 'items': {
         if (d.msg) g.hud.toast(d.msg, 'dim');
         const max = g.player.stats.bagSlots;
+        if (auth.on && d.pick) { // item do chão: passa da partida do anfitrião para a deste jogador
+          for (const it of d.items) {
+            auth.claim(g.profile, { kind: 'pickup', uid: it.uid }).then((r) => {
+              for (const x of r.items) { if (addToBag(g.bag, x, max)) g.announceItem(x); else g.hud.toast(`${icon('mochila')} Mochila cheia — item perdido`, 'warn'); }
+              g.hud.refreshBag();
+            }).catch(() => g.hud.toast('Item indisponível', 'dim'));
+          }
+          break;
+        }
+        if (auth.on) break; // itens só valem quando emitidos pelo servidor
         for (const it of d.items) { if (addToBag(g.bag, it, max)) g.announceItem(it); else g.hud.toast(`${icon('mochila')} Mochila cheia — item perdido`, 'warn'); }
         g.hud.refreshBag();
         break;
@@ -270,6 +304,7 @@ export class Coop {
       case 'cleared': if (this.isClient && !g.cleared) {
         g.cleared = true;
         g.world.addTreasure(d.x, d.z);
+        if (auth.on) { g.claim({ kind: 'clear' }); sfx.levelup(); break; }
         const p = g.profile;
         if (!p.cleared.includes(g.mapDef.id)) p.cleared.push(g.mapDef.id);
         p.money += d.bonus; saveProfile(p); sfx.levelup();

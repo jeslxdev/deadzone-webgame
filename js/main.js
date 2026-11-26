@@ -6,7 +6,9 @@ import { Menu } from './menu.js';
 import { Creator } from './creator.js';
 import { Hub } from './hub.js';
 import { Game } from './game.js';
-import { getProfile, saveProfile, initStore, flushSaves, storeMode } from './rpg.js';
+import { getProfile, saveProfile, initStore, flushSaves, storeMode, savesSettled } from './rpg.js';
+import { auth } from './auth.js';
+import { getIdentity, requireIdentity, reportDevice } from './identity.js';
 import { net, playerInfo } from './net.js';
 import { MAPS } from './data.js';
 import { icon } from './icons.js';
@@ -74,6 +76,19 @@ const app = {
     if (!coop && storeMode() === 'server') {
       try { const h = await net.host(map.id, seed, playerInfo(this.profile)); coop = { role: 'host', code: h.code }; }
       catch (e) { console.warn('co-op indisponível', e); }
+    }
+    // com servidor: a partida é aberta lá (ele passa a decidir XP, loot e dinheiro)
+    if (auth.on) {
+      try {
+        await savesSettled();
+        await auth.startRun(this.profile, map.id, coop?.role === 'client');
+      } catch (e) {
+        ld.classList.add('hidden');
+        toast('Não foi possível iniciar a partida: ' + e.message, 'warn', 6000);
+        if (net.room && coop?.role !== 'client' && !opts.coop) net.leave();
+        if (this.screenName !== 'hub') this.go('hub');
+        return;
+      }
     }
     // deixa a tela de carregamento aparecer antes de gerar o mapa
     setTimeout(() => {
@@ -173,8 +188,15 @@ addEventListener('keydown', unlock);
 const ld = document.getElementById('loading');
 document.getElementById('loading-text').textContent = 'Carregando modelos...';
 ld.classList.remove('hidden');
-Promise.all([loadModels().catch(() => 0), initStore()]).finally(() => {
+Promise.all([loadModels().catch(() => 0), initStore()]).finally(async () => {
   ld.classList.add('hidden');
+  // com servidor: e-mail/telefone obrigatório antes de jogar
+  if (storeMode() === 'server') {
+    let who = null;
+    try { who = await getIdentity(); } catch {}
+    if (who && who.identified) reportDevice();
+    else await requireIdentity();
+  }
   app.go('menu');
   if (app.invite) toast(`${icon('pessoa')} Convite para a sala <b>${app.invite.toUpperCase()}</b> — escolha ou crie um personagem para entrar.`, 'loot', 8000);
 });
