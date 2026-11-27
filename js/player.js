@@ -425,17 +425,17 @@ export class Player {
     this.netShot++;
     const mp = new THREE.Vector3();
     (this.rig.muzzle || this.rig.handR).getWorldPosition(mp);
+    const base = this.profile.equipped.base, size = MUZZLE[base] || 1;
     const spread = this.w.spread * this.stats.spreadMult;
     for (let i = 0; i < this.w.pellets; i++) {
       const a = ang + (Math.random() - 0.5) * 2 * spread;
       const { dmg, crit } = this.damageRoll(this.w.dmg);
-      g.spawnBullet(mp.x, this.y + 1.3, mp.z, a, dmg, crit, this.w.range, this.w.pierce || 0);
+      g.spawnBullet(mp.x, mp.y, mp.z, a, dmg, crit, this.w.range, this.w.pierce || 0, base);
     }
-    const base = this.profile.equipped.base, size = MUZZLE[base] || 1;
-    g.effects.muzzle(mp.x, this.y + 1.3, mp.z, size);
-    g.effects.casing(mp.x, this.y + 1.25, mp.z, this.facing, base === 'escopeta' ? 0xb02a20 : 0xc9a24a);
-    if (base === 'escopeta' && !g.fps) g.effects.slash(mp.x, mp.z, ang, 0.7, 2.2, 0xffb060, this.y + 1.2); // leque do chumbo
-    if (base === 'precisao') { g.effects.streak(mp.x, this.y + 1.3, mp.z, ang, 9, 0xfff2c0, 0.06, 0.12); g.shake(0.12); }
+    g.effects.muzzle(mp.x, mp.y, mp.z, size, ang);
+    const port = this.rig.weapon.localToWorld(new THREE.Vector3(0.05,-this.w.len*0.29,0.07));
+    g.effects.casing(port.x, port.y, port.z, ang, base === 'escopeta');
+    if (base === 'precisao') g.shake(0.12);
     this.recoil = Math.min(1.6, size);
     sfx.shot(this.profile.equipped.base);
     if (this.ammo <= 0 && this.rapidT <= 0) this.startReload();

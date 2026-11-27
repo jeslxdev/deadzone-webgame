@@ -86,11 +86,12 @@ export function castSkill(pl, id, rank, aim, ang) {
       break;
     case 'chumbo': {
       const n = areaHit(pl, { x: p.x, z: p.z, r: 7.5, cone: { ang, arc: 1.7 }, base: 45 * pw, melee: false, knock: 15, stun: 0.6 + 0.2 * rank, heavy: true });
+      const mp = pl.rig.muzzle.getWorldPosition(new THREE.Vector3());
       for (let i = 0; i < 12; i++) {
         const a = ang + (Math.random() - 0.5) * 1.6, L = 4 + Math.random() * 3.5;
-        fx.tracer(p.x, 1.3, p.z, p.x + Math.sin(a) * L, p.z + Math.cos(a) * L, 0xffd08a);
+        fx.tracer(mp.x, mp.y, mp.z, mp.x + Math.sin(a) * L, mp.z + Math.cos(a) * L, 'escopeta');
       }
-      fx.muzzle(p.x + dx * 0.9, 1.3, p.z + dz * 0.9);
+      fx.muzzle(mp.x,mp.y,mp.z,1.6,ang);
       sfx.shot('escopeta'); g.shake(0.35);
       if (n) g.hitStop(0.06);
       pl.recoil = 1.5;
@@ -112,8 +113,9 @@ export function castSkill(pl, id, rank, aim, ang) {
         if (perp < zb.radius + 0.55) { pl.dealDamage(zb, 125 * pw, { melee: false, kx: dx * 6, kz: dz * 6, stun: 0.3, heavy: true }); set.add(zb); }
       }
       const ex = p.x + dx * L, ez = p.z + dz * L;
-      fx.tracer(p.x, 1.3, p.z, ex, ez, 0xa0e0ff); fx.tracer(p.x, 1.32, p.z, ex, ez, 0xffffff);
-      fx.muzzle(p.x + dx, 1.3, p.z + dz);
+      const mp = pl.rig.muzzle.getWorldPosition(new THREE.Vector3());
+      fx.tracer(mp.x,mp.y,mp.z,ex,ez,'precisao');
+      fx.muzzle(mp.x,mp.y,mp.z,1.4,ang);
       sfx.shot('precisao'); g.shake(0.3);
       if (set.size) g.hitStop(0.07);
       pl.recoil = 2;
@@ -257,7 +259,7 @@ class Turret {
         this.cd = 0.14;
         const mx = this.x + Math.sin(this.ang) * 0.85, mz = this.z + Math.cos(this.ang) * 0.85;
         g.spawnBullet(mx, 0.95, mz, this.ang + (Math.random() - 0.5) * 0.06, this.dmg, false, 18, 0);
-        g.effects.muzzle(mx, 0.95, mz);
+        g.effects.muzzle(mx, 0.95, mz, 0.82, this.ang);
         sfx.shot('smg');
       }
     }

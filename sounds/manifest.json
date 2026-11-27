@@ -3,7 +3,7 @@
   "_creditos": {
     "vento": "Wind Loop, Jonathan Shaw (InspectorJ), loop por AntumDeluge, https://opengameart.org/content/wind-loop — CC BY 3.0, https://creativecommons.org/licenses/by/3.0/. Filtrado, convertido para mono e reamostrado.",
     "lamina": "Swishes Sound Pack, artisticdude, https://opengameart.org/content/swishes-sound-pack — CC0. Recortes, sobreposição e equalização.",
-    "corte": "8 wet squish, slurp impacts, Independent.nu, https://opengameart.org/content/8-wet-squish-slurp-impacts — CC0. Recortes, sobreposição e equalização.",
+    "corte": "RPG Audio, Kenney, CC0. https://kenney.nl/assets/rpg-audio. Edição e mistura de lâmina, couro e tecido.",
     "disparos": "Gunshot Sounds, Vincent Sevedge (Tabasco), 2009. https://opengameart.org/content/gunshot-sounds — CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Cortes, equalização, dinâmica e velocidade adaptados.",
     "vozes": "Zombie moans, Darsycho, https://opengameart.org/content/zombie-moans e Zombie noises and moans, ianzazz, https://opengameart.org/content/zombie-noises-and-moans — CC0. Edição de duração, altura e timbre.",
     "objetos": "RPG Audio e Interface Sounds, Kenney, CC0. https://kenney.nl/assets/rpg-audio e https://kenney.nl/assets/interface-sounds",
@@ -12,8 +12,12 @@
     "explosoes": "Boom Pack 1, dklon, https://opengameart.org/content/boom-pack-1 — CC BY 3.0, https://creativecommons.org/licenses/by/3.0/. Cortes, fades e equalização.",
     "criaturas": "RPG Sound Pack, artisticdude, https://opengameart.org/content/rpg-sound-pack — CC0. Cortes e equalização."
   },
-  "wind": ["vento.ogg"],
-  "body_impact": ["chop.ogg"],
+  "wind": [
+    "vento.ogg"
+  ],
+  "body_impact": [
+    "chop.ogg"
+  ],
   "sword_swing": [
     "fio-1.ogg",
     "fio-2.ogg",
@@ -33,7 +37,8 @@
     "zumbi-ataque.ogg"
   ],
   "zombie_hurt": [
-    "zumbi-dor.ogg"
+    "zumbi-dor.ogg",
+    "zumbi-dor-2.ogg"
   ],
   "zombie_death": [
     "zumbi-queda.ogg"

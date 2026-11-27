@@ -8,8 +8,38 @@ const pGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
 const tracerGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
 const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
 const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
-// clarão de disparo em blocos: núcleo + 3 barras cruzadas (uma "estrela" quadrada)
-const flashGeo = [new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.BoxGeometry(2.6, 0.32, 0.32), new THREE.BoxGeometry(0.32, 2.2, 0.32), new THREE.BoxGeometry(0.32, 0.32, 2.6)];
+// Perfis visuais orientados no sentido local +Z do disparo.
+function axial(points, segments = 10) {
+  return new THREE.LatheGeometry(points.map(([r,z]) => new THREE.Vector2(r,z)), segments).rotateX(Math.PI / 2);
+}
+const roundGeo = axial([[0,0],[0.024,0],[0.024,0.062],[0.018,0.093],[0.008,0.114],[0,0.122]]);
+const pelletGeo = new THREE.SphereGeometry(0.024,8,6);
+const blurGeo = axial([[0,-1],[0.012,-0.20],[0.015,0],[0,0]],8);
+const caseGeo = axial([[0,-0.042],[0.022,-0.042],[0.022,-0.033],[0.018,-0.03],[0.018,0.044],[0.014,0.044],[0.014,0.028],[0,0.028]]);
+const flameGeo = axial([[0,0],[0.018,0],[0.049,0.075],[0.032,0.15],[0.019,0.21],[0,0.34]],9);
+const flameColors = [];
+for (let i=0;i<flameGeo.attributes.position.count;i++) {
+  const z=flameGeo.attributes.position.getZ(i);
+  const heat = Math.max(0,1-z/0.34);
+  flameColors.push(heat, heat*heat, heat**4);
+}
+flameGeo.setAttribute('color',new THREE.Float32BufferAttribute(flameColors,3));
+const flameMaterial = new THREE.MeshBasicMaterial({color:0xffe2be,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+const copper = new THREE.MeshStandardMaterial({color:0xca9067,metalness:0.57,roughness:0.32});
+const lead = new THREE.MeshStandardMaterial({color:0x70695e,metalness:0.42,roughness:0.48});
+const brass = new THREE.MeshStandardMaterial({color:0xd2a051,metalness:0.55,roughness:0.35});
+const redHull = new THREE.MeshStandardMaterial({color:0x8f3426,metalness:0.1,roughness:0.59});
+export function makeRound(weapon) {
+  const pellet = weapon === 'escopeta';
+  const mesh = new THREE.Mesh(pellet ? pelletGeo : roundGeo, pellet ? lead : copper);
+  const scale = weapon === 'precisao' ? 0.80 : weapon === 'smg' || pellet ? 0.52 : 0.61;
+  mesh.scale.setScalar(scale);
+  const blur = new THREE.Mesh(blurGeo,basic(pellet ? 0x9d978a : 0xf7cf8c,false,pellet ? 0.18 : 0.34));
+  blur.scale.z = pellet ? 0.15 : weapon === 'precisao' ? 0.65 : 0.43;
+  blur.visible = false;
+  mesh.add(blur);
+  return mesh;
+}
 const circleGeo = new THREE.CircleGeometry(1, 40);
 const ringGeo = new THREE.RingGeometry(0.92, 1, 48);
 const ringBlockGeo = new THREE.RingGeometry(0.86, 1, 8); // onda de choque low-poly (octógono)
@@ -209,41 +239,38 @@ export class Effects {
   }
   sparks(x, y, z) { this.particles(x, y, z, 5, 0xffd27a, 6, 0.25, 0.6, 6); }
 
-  tracer(x1, y, z1, x2, z2, color = 0xffe08a) {
-    const mesh = new THREE.Mesh(tracerGeo, basic(color, true, 0.9));
-    const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
-    mesh.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
-    mesh.scale.set(1, 1, len);
-    mesh.rotation.y = Math.atan2(dx, dz);
+  tracer(x1, y, z1, x2, z2, weapon = 'fuzil') {
+    const dx = x2-x1, dz = z2-z1, len = Math.hypot(dx,dz);
+    if (!len) return;
+    const mesh = makeRound(weapon);
+    mesh.position.set(x1,y,z1); mesh.rotation.y = Math.atan2(dx,dz);
     this.scene.add(mesh);
-    this.fx.push({ mesh, t: 0, life: 0.06, kind: 'fade', base: 0.9 });
+    this.fx.push({ mesh, t:0, life:len/70, kind:'round', x:x1, z:z1, dx, dz });
   }
 
-  muzzle(x, y, z, size = 1) {
-    this.flash.position.set(x, y + 0.3, z);
-    this.flash.color.setHex(0xffb060);
-    this.flash.intensity = 8 * Math.min(2, size);
-    this.flashT = 0.05;
-    // clarão em blocos (girado ao acaso para variar a forma a cada tiro)
-    const m = basic(0xffd08a, true, 0.95);
-    for (const pg of flashGeo) {
-      const mesh = new THREE.Mesh(pg, m);
-      mesh.position.set(x, y, z);
-      mesh.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.6);
-      mesh.scale.setScalar(0.12 * size);
+  muzzle(x, y, z, size = 1, angle = 0) {
+    this.flash.position.set(x,y,z);
+    this.flash.color.setHex(0xffbc79);
+    this.flash.intensity = 5 * Math.min(2,size);
+    this.flashT = 0.04;
+    const length = size*(0.81+Math.random()*0.36);
+    for (const core of [false,true]) {
+      const mesh = new THREE.Mesh(flameGeo,flameMaterial);
+      mesh.position.set(x,y,z); mesh.rotation.y=angle; mesh.rotateZ(Math.random()*Math.PI);
+      mesh.scale.setScalar(size*(core ? 0.66 : 1));
+      mesh.scale.z=length*(core ? 0.62 : 1);
       this.scene.add(mesh);
-      this.fx.push({ mesh, t: 0, life: 0.05, kind: 'fade', base: 0.95 });
+      this.fx.push({ mesh,t:0,life:core ? 0.028 : 0.045,kind:'fade',base:core ? 0.95 : 0.53 });
     }
   }
 
-  // Cápsula de munição ejetada para a direita da arma, quica no chão
-  casing(x, y, z, facing, color = 0xc9a24a) {
-    const mesh = new THREE.Mesh(pGeo, basic(color, false, 1));
-    mesh.position.set(x, y, z);
-    const rx = -Math.cos(facing), rz = Math.sin(facing); // direita do personagem
-    const sp = 2.2 + Math.random() * 1.2;
+  casing(x, y, z, facing, shotgun = false) {
+    const mesh = new THREE.Mesh(caseGeo,shotgun ? redHull : brass);
+    mesh.position.set(x,y,z); mesh.rotation.set(0.65,facing,0.4);
+    const speed = 1.7+Math.random()*0.9;
     this.scene.add(mesh);
-    this.parts.push({ mesh, vx: rx * sp + (Math.random() - 0.5), vy: 2.5 + Math.random() * 1.5, vz: rz * sp + (Math.random() - 0.5), life: 0.9, max: 0.9, s: 0.32, g: 16 });
+    this.parts.push({ mesh, vx:-Math.cos(facing)*speed, vy:2.1+Math.random(), vz:Math.sin(facing)*speed,
+      life:0.9, max:0.9, s:shotgun ? 1.25 : 1, g:14, casing:true, spin:8+Math.random()*8 });
   }
   // Rastro reto de estocada / tiro pesado
   streak(x, y, z, angle, len, color = 0xffffff, width = 0.12, life = 0.16) {
@@ -370,16 +397,23 @@ export class Effects {
       p.mesh.position.z += p.vz * dt;
       if (p.mesh.position.y < 0.05) {
         if (p.stain) { p.stain = false; this.decal(p.mesh.position.x, p.mesh.position.z, 0.35 + Math.random() * 0.35); }
-        p.mesh.position.y = 0.05; p.vx *= 0.6; p.vz *= 0.6; p.vy = 0;
+        p.mesh.position.y = 0.05; p.vx *= 0.6; p.vz *= 0.6;
+        p.vy = p.casing && p.vy < -0.8 ? -p.vy * 0.26 : 0;
       }
-      p.mesh.scale.setScalar(p.s * Math.max(0.1, p.life / p.max));
+      if (p.casing) {
+        p.mesh.scale.setScalar(p.s);
+        if (p.mesh.position.y > 0.05) { p.mesh.rotation.z += dt*p.spin; p.mesh.rotation.x += dt*p.spin*0.6; }
+      } else p.mesh.scale.setScalar(p.s * Math.max(0.1, p.life / p.max));
       if (p.life <= 0) { this.scene.remove(p.mesh); this.parts.splice(i, 1); }
     }
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i];
       f.t += dt;
       const k = Math.min(1, f.t / f.life);
-      if (f.kind === 'fade') {
+      if (f.kind === 'round') {
+        f.mesh.position.x = f.x+f.dx*k; f.mesh.position.z = f.z+f.dz*k;
+        f.mesh.children[0].visible = true;
+      } else if (f.kind === 'fade') {
         f.mesh.material = f.mesh.material; // compartilhado
         f.mesh.visible = true;
         if (f.grow) f.mesh.scale.setScalar(1 + k * f.grow);

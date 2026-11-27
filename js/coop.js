@@ -80,9 +80,13 @@ class RemotePlayer {
     if (d < 20) sfx.slash(false, this.wkey.split(':')[0], this.soundPan(d), 0.85 * (1 - d / 20));
   }
   remoteShot() {
-    const a = this.facing, mx = this.pos.x + Math.sin(a) * 0.9, mz = this.pos.z + Math.cos(a) * 0.9;
-    this.g.effects.muzzle(mx, 1.3, mz);
-    this.g.effects.tracer(mx, 1.3, mz, mx + Math.sin(a) * 14, mz + Math.cos(a) * 14);
+    const a = this.facing, weapon = this.wkey.split(':')[0], mp = new THREE.Vector3();
+    (this.rig.muzzle || this.rig.handR).getWorldPosition(mp);
+    this.g.effects.muzzle(mp.x,mp.y,mp.z,1,a);
+    const dx=Math.sin(a), dz=Math.cos(a);
+    let length=0;
+    while (length < 14 && !this.g.world.pointBlocked(mp.x+dx*(length+0.5),mp.z+dz*(length+0.5),mp.y)) length+=0.5;
+    this.g.effects.tracer(mp.x,mp.y,mp.z,mp.x+dx*length,mp.z+dz*length,weapon);
     this.recoil = 1;
     const d = Math.hypot(this.pos.x - this.g.player.pos.x, this.pos.z - this.g.player.pos.z);
     if (d < 35) sfx.shot(this.wkey.split(':')[0], this.soundPan(d), 0.85 * (1 - d / 35));

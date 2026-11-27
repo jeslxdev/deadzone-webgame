@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { ZOMBIE_TYPES, RANKS, RARITIES } from './data.js';
 import { createWorld } from './world.js';
-import { Effects } from './effects.js';
+import { Effects, makeRound } from './effects.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { Zombie } from './zombies.js';
@@ -24,8 +24,6 @@ import { auth } from './auth.js';
 import { PIX } from './pixtex.js';
 
 const MAX_ZOMBIES = 160;
-const bulletGeo = new THREE.BoxGeometry(0.07, 0.07, 0.9);
-const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, blending: THREE.AdditiveBlending, transparent: true });
 // projéteis em bloco (estilo voxel): cubo de gosma ácida e granada quadrada com pixel art
 const acidGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
 const acidMat = new THREE.MeshBasicMaterial({ map: PIX.acid() });
@@ -219,8 +217,8 @@ export class Game {
   }
 
   // ---------- Projéteis ----------
-  spawnBullet(x, y, z, ang, dmg, crit, range, pierce) {
-    const mesh = new THREE.Mesh(bulletGeo, bulletMat);
+  spawnBullet(x, y, z, ang, dmg, crit, range, pierce, weapon = 'fuzil') {
+    const mesh = makeRound(weapon);
     mesh.position.set(x, y, z);
     mesh.rotation.y = ang;
     this.scene.add(mesh);
@@ -271,6 +269,7 @@ export class Game {
         }
       }
       b.mesh.position.set(b.x, b.y, b.z);
+      b.mesh.children[0].visible = true;
       if (dead) { this.scene.remove(b.mesh); this.bullets.splice(i, 1); }
     }
     const p = this.player;
