@@ -98,12 +98,22 @@ export class Zombie {
 
   get alive() { return !this.dead; }
 
+  playVoice(event, ...args) {
+    const listener = this.game.player.pos;
+    const dx = this.pos.x - listener.x, dz = this.pos.z - listener.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance >= 26) return;
+    const right = this.game.camera.matrixWorld.elements;
+    const pan = (right[0] * dx + right[2] * dz) / Math.max(4, distance);
+    sfx[event](...args, pan, 1 - distance / 26);
+  }
+
   wake() {
     if (this.state === 'dormant') {
       this.state = 'chase';
       if (this.rank === 'boss') this.game.onBossAwake(this);
     }
-    if (!this.aggro && this.type === 'corredor') sfx.scream();
+    if (!this.aggro && this.type === 'corredor') this.playVoice('scream');
     this.aggro = true;
   }
 
@@ -128,7 +138,7 @@ export class Zombie {
       if (Math.random() < 0.2) g.effects.decal(this.pos.x + dx * 0.5, this.pos.z + dz * 0.5, 0.6);
       sfx.bulletHit();
     }
-    if (this.hp - amount > 0) sfx.zombieHurt();
+    if (this.hp > 0) this.playVoice('zombieHurt');
     g.effects.number(this.pos.x, 2.2 * this.scale, this.pos.z, Math.round(amount), opts.crit ? '#ffd23f' : '#ffffff', opts.crit ? 22 : 16);
     if (this.remote) { // co-op (convidado): o anfitrião decide o dano real
       g.coop.sendHit(this, raw, opts);
@@ -162,7 +172,7 @@ export class Zombie {
     if (this.T.explode && !opts.noExplode) this.explode(0.6);
     if (this.nest) this.nest.children = Math.max(0, this.nest.children - 1);
     const g = this.game;
-    sfx.zombieDeath(this.rank);
+    this.playVoice('zombieDeath', this.rank);
     g.effects.decal(this.pos.x, this.pos.z, 1.4 * this.scale);
     // decapitação em golpes de lâmina
     if (opts.melee && !this.rig.gltf && this.rank !== 'boss' && Math.random() < (opts.heavy ? 0.75 : 0.45)) this.decapitate(opts);
@@ -289,11 +299,11 @@ export class Zombie {
           } else {
             this.atkCd -= dt;
             if (dist < reach) {
-              if (this.atkCd <= 0) { this.windup = 0.38; sfx.zombieAttack(this.rank); }
+              if (this.atkCd <= 0) { this.windup = 0.38; this.playVoice('zombieAttack', this.rank); }
             } else [mx, mz] = this.pathTo(dist, dx, dz);
           }
         }
-        if (Math.random() < dt * 0.12 && dist < 26) sfx.zombie(dist, Math.max(-1, Math.min(1, -dx / 22)));
+        if (Math.random() < dt * 0.12 && dist < 26) this.playVoice('zombie', dist);
       } else {
         // vagando perto de casa
         this.wanderT -= dt;
@@ -382,7 +392,7 @@ export class Zombie {
   remoteDie() {
     const g = this.game;
     this.dead = true; this.hp = 0; this.deathT = 0;
-    sfx.zombieDeath(this.rank);
+    this.playVoice('zombieDeath', this.rank);
     g.effects.decal(this.pos.x, this.pos.z, 1.4 * this.scale);
     const h = this.lastLocalHit;
     if (h && h.melee && g.time - h.t < 0.6 && !this.rig.gltf && this.rank !== 'boss' && Math.random() < (h.heavy ? 0.75 : 0.45)) this.decapitate(h);

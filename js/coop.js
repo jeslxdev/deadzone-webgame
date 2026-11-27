@@ -69,11 +69,15 @@ class RemotePlayer {
     if (s.at !== this.atk) { this.atk = s.at; this.attackAnim = 1; this.swingDir = s.sd || -this.swingDir; this.remoteSwing(); }
     if (s.sh !== this.shot) { this.shot = s.sh; this.remoteShot(); }
   }
+  soundPan(distance) {
+    const p = this.g.player.pos, right = this.g.camera.matrixWorld.elements;
+    return ((this.pos.x - p.x) * right[0] + (this.pos.z - p.z) * right[2]) / Math.max(distance, 4);
+  }
   remoteSwing() {
     if (this.isGun) return;
     const a = this.facing, d = Math.hypot(this.pos.x - this.g.player.pos.x, this.pos.z - this.g.player.pos.z);
     this.g.effects.slash(this.pos.x + Math.sin(a) * 0.3, this.pos.z + Math.cos(a) * 0.3, a, 2.2, 2.9, 0xe8f4ff);
-    if (d < 20) sfx.slash();
+    if (d < 20) sfx.slash(false, this.wkey.split(':')[0], this.soundPan(d), 0.85 * (1 - d / 20));
   }
   remoteShot() {
     const a = this.facing, mx = this.pos.x + Math.sin(a) * 0.9, mz = this.pos.z + Math.cos(a) * 0.9;
@@ -81,7 +85,7 @@ class RemotePlayer {
     this.g.effects.tracer(mx, 1.3, mz, mx + Math.sin(a) * 14, mz + Math.cos(a) * 14);
     this.recoil = 1;
     const d = Math.hypot(this.pos.x - this.g.player.pos.x, this.pos.z - this.g.player.pos.z);
-    if (d < 35) sfx.shot(this.wkey.split(':')[0]);
+    if (d < 35) sfx.shot(this.wkey.split(':')[0], this.soundPan(d), 0.85 * (1 - d / 35));
   }
   update(dt) {
     const s = this.t, rig = this.rig;

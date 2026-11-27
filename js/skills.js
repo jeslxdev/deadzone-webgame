@@ -57,7 +57,7 @@ export function castSkill(pl, id, rank, aim, ang) {
       pl.lunge = { t: 0.24, dx, dz, speed: 36, dmg: 48 * pw, hit: new Set() };
       pl.invuln = 0.35; pl.attackAnim = 1; pl.attackDur = 0.24;
       fx.slash(p.x, p.z, ang, 1.2, 3, 0xbfe6ff);
-      sfx.dash(); sfx.slash(true);
+      sfx.dash(); sfx.slash(true, pl.profile.equipped.base);
       break;
     case 'tempestade':
       pl.spinT = 2.5 + 0.5 * (rank - 1); pl.spinTick = 0; pl.spinDmg = 15 * pw;
@@ -65,7 +65,7 @@ export function castSkill(pl, id, rank, aim, ang) {
     case 'onda':
       g.skillObjs.push(new Wave(g, p.x, p.z, ang, 42 * st.melee * pw));
       pl.attackAnim = 1; pl.attackDur = 0.2; pl.swingDir *= -1;
-      sfx.slash(true);
+      sfx.slash(true, pl.profile.equipped.base);
       break;
     case 'sismico': {
       const t = toAim(8);

@@ -31,24 +31,38 @@ async function loadSamples() {
     const r = await fetch('sounds/manifest.json', { cache: 'no-store' });
     if (!r.ok) return;
     const man = await r.json();
-    for (const [ev, files] of Object.entries(man)) {
-      if (ev.startsWith('_')) continue;
-      samples[ev] = [];
-      for (const f of [].concat(files)) {
-        try { const buf = await (await fetch('sounds/' + f)).arrayBuffer(); samples[ev].push(await ctx.decodeAudioData(buf)); }
-        catch (e) { console.warn('[sons] falha', f, e); }
+    const queue = Object.entries(man).filter(([ev]) => !ev.startsWith('_'));
+    async function loadEvents() {
+      while (queue.length) {
+        const [ev, files] = queue.shift();
+        samples[ev] = [];
+        for (const f of [].concat(files)) {
+          try {
+            const response = await fetch('sounds/' + f);
+            if (!response.ok) throw Error(String(response.status));
+            samples[ev].push(await ctx.decodeAudioData(await response.arrayBuffer()));
+            if (ev === 'wind' && amb) addWind(amb);
+          } catch (e) { console.warn('[sons] falha', f, e); }
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(4, queue.length) }, loadEvents));
   } catch {}
 }
-function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0 } = {}) {
+const lastSample = {};
+function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, delay = 0 } = {}) {
   const list = samples[ev];
   if (!list || !list.length) return false;
   const src = ctx.createBufferSource();
-  src.buffer = list[(Math.random() * list.length) | 0];
+  const previous = lastSample[ev];
+  const skip = list.length > 1 && previous !== undefined;
+  let index = Math.floor(Math.random() * (list.length - Number(skip)));
+  if (skip && index >= previous) index++;
+  lastSample[ev] = index;
+  src.buffer = list[index];
   src.playbackRate.value = rate * (0.95 + Math.random() * 0.1);
-  src.connect(out({ gain, pan, rev }));
-  src.start();
+  src.connect(out({ gain, pan, rev, bus }));
+  src.start(ctx.currentTime + delay);
   return true;
 }
 const last = {};
@@ -86,14 +100,18 @@ export function initAudio() {
     }
   }
 
-  // reverb externo (resposta ao impulso sintética)
-  const irLen = Math.floor(ctx.sampleRate * 2.6);
+  // Reflexões breves e assimétricas de paredes externas, com uma cauda difusa curta.
+  const irLen = Math.floor(ctx.sampleRate * 1.05);
   const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
     for (let i = 0; i < irLen; i++) {
-      const t = i / irLen;
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3.2) * (i < 400 ? i / 400 : 1);
+      const seconds = i / ctx.sampleRate;
+      const onset = Math.max(0, Math.min(1, (seconds - 0.033) / 0.018));
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-6.9 * seconds) * onset * 0.09;
+    }
+    for (const [delay, level] of [[0.021,0.86],[0.046,-0.57],[0.079,0.32]]) {
+      d[Math.round((delay + ch * 0.003) * ctx.sampleRate)] += level;
     }
   }
   const conv = ctx.createConvolver();
@@ -195,10 +213,10 @@ const GUNS = {
   fuzil:    { crack: 0.9, body: 2000, bodyDur: 0.12, thump: 120, thumpPeak: 0.55, rev: 0.4, echo: 0.35, gain: 0.75 },
   precisao: { crack: 1.2, body: 1500, bodyDur: 0.3, thump: 70,  thumpPeak: 1.0, rev: 0.8, echo: 0.6, gain: 1.0, bolt: true },
 };
-function gunshot(kind, pan = 0) {
+function gunshot(kind, pan = 0, gain = 1) {
   const G = GUNS[kind] || GUNS.pistola;
   const t = ctx.currentTime, v = rnd(0.94, 1.06);
-  const o = out({ gain: G.gain, pan, rev: G.rev, echo: G.echo });
+  const o = out({ gain: G.gain * gain, pan, rev: G.rev, echo: G.echo });
   // estalo supersônico (transiente)
   noise(o, { t, dur: 0.018, peak: G.crack, type: 'highpass', f: 3000 * v, q: 0.5 });
   // Primeiro impulso seco e breve ruído mecânico dão ataque ao disparo.
@@ -210,26 +228,24 @@ function gunshot(kind, pan = 0) {
   osc(o, { t, type: 'sine', f: G.thump * v, f2: 38, dur: 0.18, peak: G.thumpPeak, slide: 0.14 });
   // cauda (ruído rosa abafado)
   noise(o, { buf: pink, t: t + 0.01, dur: G.bodyDur * 2.5, a: 0.01, peak: 0.25, type: 'lowpass', f: 900, f2: 200 });
-  if (G.pump) { mech(t + 0.42, pan, 0.5); mech(t + 0.56, pan, 0.6, 1800); }
-  if (G.bolt) { mech(t + 0.5, pan, 0.4, 2600); mech(t + 0.7, pan, 0.5, 1600); }
   // cápsula caindo no chão
-  if (Math.random() < 0.7) shell(t + rnd(0.25, 0.4), pan);
+  if (Math.random() < 0.7) shell(t + rnd(0.25, 0.4), pan, gain);
 }
 function mech(t, pan, peak = 0.4, f = 2200) {
   const o = out({ gain: 0.5, pan, rev: 0.05 });
   noise(o, { t, dur: 0.03, peak, type: 'bandpass', f, q: 6 });
   noise(o, { t: t + 0.012, dur: 0.02, peak: peak * 0.6, type: 'bandpass', f: f * 1.7, q: 8 });
 }
-function shell(t, pan) {
-  const o = out({ gain: 0.12, pan });
+function shell(t, pan, gain) {
+  const o = out({ gain: 0.12 * gain, pan });
   const f = rnd(5000, 7000);
   for (let i = 0; i < 3; i++) osc(o, { t: t + i * rnd(0.05, 0.08), type: 'triangle', f: f * rnd(0.9, 1.1), dur: 0.04, peak: 0.4 / (i + 1) });
 }
 
 // ---------- corpo a corpo ----------
-function whoosh(pan = 0, metal = true, big = false) {
+function whoosh(pan = 0, metal = true, big = false, gain = 1) {
   const t = ctx.currentTime;
-  const o = out({ gain: big ? 0.8 : 0.55, pan, rev: 0.08 });
+  const o = out({ gain: (big ? 0.68 : 0.48) * gain, pan, rev: 0.04 });
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.linearRampToValueAtTime(1, t + 0.07);
@@ -243,8 +259,9 @@ function whoosh(pan = 0, metal = true, big = false) {
   s.connect(bp); bp.connect(g); s.start(t, Math.random() * 2); s.stop(t + 0.4);
   if (metal) {
     // brilho metálico da lâmina
-    const m = out({ gain: 0.06, pan, rev: 0.2 });
-    for (const fr of [3200, 4870, 6310]) osc(m, { t: t + 0.02, type: 'sine', f: fr * rnd(0.98, 1.02), dur: 0.35, peak: 0.5, a: 0.01 });
+    const m = out({ gain: (big ? 0.42 : 0.35) * gain, pan, rev: 0.035 });
+    noise(m, { t: t + 0.008, a: 0.035, dur: 0.085, peak: 0.88, type: 'bandpass', f: rnd(1900, 2400), f2: 6600, q: 1.05 });
+    noise(m, { t: t + 0.052, dur: 0.085, peak: 0.44, type: 'bandpass', f: 5200, f2: 1700, q: 1.6 });
   }
 }
 function fleshHit(pan = 0, heavy = false) {
@@ -331,7 +348,8 @@ function zvoice(o, t, { f = 70, dur = 1.1, contour = [0.9, 1.15, 0.8], fry = 32,
   for (const n of [src, sub, lfo]) { n.start(t); n.stop(t + dur + 0.05); }
 }
 function groan(dist = 10, pan = 0) {
-  const vol = Math.max(0.06, 1 - dist / 30);
+  if (dist >= 26) return;
+  const vol = (1 - Math.max(0, dist) / 26) ** 1.25;
   if (playSample('zombie_say', { gain: 0.8 * vol, pan, rev: 0.2 })) return;
   // Gemido original de zumbi: ar rouco, duas notas graves ligadas e sem a
   // modulação quadrada que fazia o som parecer eletrônico.
@@ -356,8 +374,8 @@ function groan(dist = 10, pan = 0) {
   carrier.connect(vibratoEnv); vibratoEnv.connect(o);
   carrier.start(t); carrier.stop(t + dur + 0.05); wobble.start(t); wobble.stop(t + dur + 0.05);
 }
-function screech(pan = 0) {
-  const o = out({ gain: 0.25, pan, rev: 0.3 });
+function screech(pan = 0, gain = 1) {
+  const o = out({ gain: 0.25 * gain, pan, rev: 0.3 });
   const f = rnd(220, 300);
   voice(o, ctx.currentTime, { f0: f, f1: f * 1.4, dur: 0.6, formants: [[900, 6, 1], [2200, 8, 0.7]], vib: 11, vibDepth: 20, breath: 0.5, dist: true });
 }
@@ -389,6 +407,9 @@ function slice(heavy = false, pan = 0) {
   noise(o, { buf: brown, t: t + 0.004, dur: heavy ? 0.14 : 0.09, peak: heavy ? 1 : 0.7, type: 'lowpass', f: 620, f2: 170 });
   noise(o, { buf: pink, t: t + 0.012, dur: heavy ? 0.14 : 0.09, peak: 0.65, type: 'bandpass', f: rnd(800, 1200), f2: 330, q: 1.5 });
   osc(o, { t, type: 'sine', f: heavy ? 115 : 150, f2: 55, dur: 0.075, peak: heavy ? 0.65 : 0.4 });
+  // Um breve estalo do fio e textura irregular de contato, sem sino prolongado.
+  noise(o, { t: t + 0.003, dur: 0.012, peak: heavy ? 0.58 : 0.42, type: 'highpass', f: rnd(2800, 3800), q: 0.7 });
+  noise(o, { buf: pink, t: t + 0.038, dur: 0.055, peak: heavy ? 0.35 : 0.22, type: 'bandpass', f: rnd(650, 1000), f2: 300, q: 0.9 });
 }
 function spurt(pan = 0) {
   const t = ctx.currentTime, o = out({ gain: 0.35, pan, rev: 0.1 });
@@ -408,44 +429,65 @@ function footstep(run, theme) {
 
 // ---------- API pública ----------
 export const sfx = {
-  shot(kind, pan = 0) { if (!ctx || throttle('shot', 30)) return; if (playSample('shot_' + kind, { gain: 0.8, pan, rev: 0.3 })) return; gunshot(kind, pan); },
-  slash(big = false) { if (!ctx || throttle('slash', 50)) return; whoosh(0, true, big); },
-  swing() { if (!ctx || throttle('slash', 50)) return; whoosh(0, false); },
-  hit(heavy = false) { if (!ctx || throttle('hit', 35)) return; fleshHit(0, heavy); },
+  shot(kind, pan = 0, gain = 1) {
+    if (!ctx || throttle(gain < 1 ? 'remoteShot' : 'shot', 30)) return;
+    const gun = GUNS[kind] || GUNS.pistola;
+    if (!playSample('shot_' + kind, { gain: gun.gain * gain, pan, rev: gun.rev * 0.16 })) gunshot(kind, pan, gain);
+    const t = ctx.currentTime;
+    if (gun.pump) { mech(t + 0.42, pan, 0.5 * gain); mech(t + 0.56, pan, 0.6 * gain, 1800); }
+    if (gun.bolt) { mech(t + 0.5, pan, 0.4 * gain, 2600); mech(t + 0.7, pan, 0.5 * gain, 1600); }
+  },
+  slash(big = false, weapon = 'katana', pan = 0, gain = 1) {
+    if (!ctx || throttle(gain < 1 ? 'remoteSlash' : 'slash', 50)) return;
+    const rate = ({ wakizashi: 1.29, nodachi: 0.71, naginata: 0.83, faca: 0.92 })[weapon] || 1;
+    if (!playSample('sword_swing', { gain: (big ? 0.83 : 0.72) * gain, pan, rate: rate * (big ? 0.9 : 1), rev: 0.025 })) whoosh(pan, true, big, gain);
+  },
+  swing() { if (!ctx || throttle('slash', 50)) return; playSample('cloth', { gain: 0.27 }); whoosh(0, false); },
+  hit(heavy = false) { if (!ctx || throttle('hit', 35)) return; playSample('body_impact', { gain: heavy ? 0.46 : 0.3, rate: 0.84 }); fleshHit(0, heavy); },
   crit() { if (!ctx) return; const o = out({ gain: 0.15 }); osc(o, { type: 'triangle', f: 1400, f2: 2200, dur: 0.08, peak: 0.6 }); },
   zombie(dist = 10, pan = 0) { if (!ctx || throttle('groan', 450)) return; groan(dist, pan); },
-  zombieHurt(pan = 0) {
+  zombieHurt(pan = 0, gain = 1) {
     if (!ctx || throttle('zhurt', 140)) return;
-    if (playSample('zombie_hurt', { gain: 0.7, pan })) return;
-    zvoice(out({ gain: 0.45, pan, rev: 0.08 }), ctx.currentTime, { f: rnd(90, 115), dur: rnd(0.22, 0.32), contour: [1.1, 1.0, 0.75], fry: 42, vowel: 'e', syll: 1, noiseAmt: 0.4, bright: 2200 });
+    if (playSample('zombie_hurt', { gain: 0.7 * gain, pan })) return;
+    zvoice(out({ gain: 0.45 * gain, pan, rev: 0.08 }), ctx.currentTime, { f: rnd(90, 115), dur: rnd(0.22, 0.32), contour: [1.1, 1.0, 0.75], fry: 42, vowel: 'e', syll: 1, noiseAmt: 0.4, bright: 2200 });
   },
-  zombieAttack(rank = 'normal') {
+  zombieAttack(rank = 'normal', pan = 0, gain = 1) {
     if (!ctx || throttle('zatk', 180)) return;
     const big = rank === 'boss' || rank === 'miniboss';
-    zvoice(out({ gain: big ? 0.8 : 0.5, rev: 0.12 }), ctx.currentTime, { f: big ? 55 : rnd(80, 100), dur: big ? 0.6 : 0.34, contour: [0.9, 1.2, 0.85], fry: 38, vowel: 'a', syll: 1, noiseAmt: 0.45, bright: big ? 1400 : 2000 });
+    if (playSample('zombie_attack', { gain: (big ? 0.9 : 0.68) * gain, pan, rate: big ? 0.76 : 1, rev: 0.08 })) return;
+    zvoice(out({ gain: (big ? 0.8 : 0.5) * gain, pan, rev: 0.12 }), ctx.currentTime, { f: big ? 55 : rnd(80, 100), dur: big ? 0.6 : 0.34, contour: [0.9, 1.2, 0.85], fry: 38, vowel: 'a', syll: 1, noiseAmt: 0.45, bright: big ? 1400 : 2000 });
   },
-  zombieDeath(rank = 'normal', pan = 0) {
+  zombieDeath(rank = 'normal', pan = 0, gain = 1) {
     if (!ctx || throttle('zdeath', 90)) return;
     const big = rank === 'boss' || rank === 'miniboss';
-    if (playSample('zombie_death', { gain: big ? 1 : 0.7, pan, rate: big ? 0.7 : 1, rev: 0.2 })) return;
-    const o = out({ gain: big ? 0.9 : 0.5, pan, rev: 0.3 });
+    if (playSample('zombie_death', { gain: (big ? 1 : 0.7) * gain, pan, rate: big ? 0.7 : 1, rev: 0.2 })) return;
+    const o = out({ gain: (big ? 0.9 : 0.5) * gain, pan, rev: 0.3 });
     zvoice(o, ctx.currentTime, { f: big ? 50 : rnd(72, 88), dur: big ? 1.6 : rnd(0.7, 1.0), contour: [1.05, 0.9, 0.5], fry: 22, fryDepth: 0.9, vowel: 'o', syll: 1, noiseAmt: 0.35, bright: 1500 });
     noise(o, { buf: pink, t: ctx.currentTime + 0.3, dur: 0.4, peak: 0.4, type: 'lowpass', f: 700, f2: 200, q: 8 }); // gorgolejo
   },
-  slice(heavy = false) { if (!ctx || throttle('slice', 45)) return; if (playSample('sword_hit', { gain: 0.8 })) return; slice(heavy); },
-  decap() { if (!ctx) return; slice(true); spurt(); },
+  slice(heavy = false) {
+    if (!ctx || throttle('slice', 45)) return;
+    if (!playSample('sword_hit', { gain: heavy ? 0.98 : 0.82, rate: heavy ? 0.86 : 1 })) slice(heavy);
+  },
+  decap() { if (!ctx) return; spurt(); },
   bulletHit() {
     if (!ctx || throttle('bhit', 45)) return;
+    playSample('body_impact', { gain: 0.36, rate: 1.31 });
     const o = out({ gain: 0.35 });
     noise(o, { dur: 0.05, peak: 0.8, type: 'lowpass', f: 900, f2: 300 });
     noise(o, { buf: pink, dur: 0.08, peak: 0.5, type: 'lowpass', f: 700, f2: 250, q: 7 });
     noise(o, { dur: 0.012, peak: 0.35, type: 'bandpass', f: rnd(1400, 2100), q: 1.2 });
     osc(o, { type: 'sine', f: rnd(125, 160), f2: 55, dur: 0.055, peak: 0.3 });
   },
-  step(run = 0, theme = 'city') { if (!ctx) return; if (playSample('step', { gain: run ? 0.5 : 0.35 })) return; footstep(run, theme); },
+  step(run = 0, theme = 'city') {
+    if (!ctx) return;
+    const options = { gain: run ? 0.48 : 0.33, rate: run ? 1.1 : 1 };
+    if (!playSample('step_' + theme, options) && !playSample('step', options)) footstep(run, theme);
+  },
   heavyStep(dist = 10, boss = false) {
     if (!ctx || throttle('hstep', 120)) return;
     const vol = Math.max(0.1, 1 - dist / 30);
+    playSample('land', { gain: vol * (boss ? 0.7 : 0.45), rate: boss ? 0.62 : 0.82 });
     const t = ctx.currentTime, o = out({ gain: (boss ? 1.0 : 0.6) * vol, rev: 0.2 });
     noise(o, { buf: brown, t, dur: 0.3, peak: 1.4, type: 'lowpass', f: boss ? 140 : 200, q: 1 });
     osc(o, { t, type: 'sine', f: boss ? 50 : 65, f2: 28, dur: 0.28, peak: 0.9 });
@@ -453,74 +495,104 @@ export const sfx = {
   },
   shuffle(dist = 5) {
     if (!ctx || throttle('shuffle', 160)) return;
+    if (playSample('step_suburb', { gain: 0.22 * Math.max(0, 1 - dist / 10), rate: 0.69 })) return;
     const o = out({ gain: 0.2 * Math.max(0.1, 1 - dist / 10) });
     noise(o, { buf: pink, dur: 0.22, a: 0.05, peak: 0.6, type: 'bandpass', f: 750, f2: 480, q: 1.5 });
   },
-  scream(pan = 0) { if (!ctx || throttle('scream', 700)) return; screech(pan); },
-  explode(pan = 0) { if (!ctx || throttle('boom', 60)) return; boom(1, pan); },
+  scream(pan = 0, gain = 1) { if (!ctx || throttle('scream', 700)) return; if (!playSample('zombie_attack', { gain: 0.66 * gain, pan, rate: 1.3, rev: 0.12 })) screech(pan, gain); },
+  explode(pan = 0) { if (!ctx || throttle('boom', 60)) return; if (!playSample('blast', { gain: 1.08, pan, rev: 0.23 })) boom(1, pan); },
   pickup() {
     if (!ctx || throttle('pick', 80)) return;
+    if (playSample('pickup', { gain: 0.34 })) return;
     const o = out({ gain: 0.18, rev: 0.15 });
     osc(o, { type: 'triangle', f: 880, dur: 0.12, peak: 0.6 });
     osc(o, { type: 'sine', f: 1320, dur: 0.18, peak: 0.4, t: ctx.currentTime + 0.05 });
   },
   rare() {
     if (!ctx) return;
+    if (playSample('rare', { gain: 0.34, rev: 0.1 })) return;
     const o = out({ gain: 0.22, rev: 0.5 });
     [523, 659, 784, 1046].forEach((f, i) => osc(o, { type: 'sine', f, dur: 0.6, peak: 0.45, t: ctx.currentTime + i * 0.08 }));
   },
   levelup() {
     if (!ctx) return;
+    if (playSample('levelup', { gain: 0.42, rev: 0.13 })) return;
     const o = out({ gain: 0.2, rev: 0.6 });
     [392, 494, 587, 784].forEach((f, i) => { osc(o, { type: 'triangle', f, dur: 0.9, peak: 0.4, t: ctx.currentTime + i * 0.1 }); osc(o, { type: 'sine', f: f * 2, dur: 0.6, peak: 0.15, t: ctx.currentTime + i * 0.1 }); });
   },
   hurt(fraction = 0.1) {
     if (!ctx || throttle('hurt', 260)) return;
-    if (playSample('player_hurt', { gain: 0.9 })) return;
+    const vocal = playSample('player_hurt', { gain: 0.57 + Math.min(0.34, fraction), delay: 0.025 });
     const t = ctx.currentTime, o = out({ gain: 0.75, rev: 0.04 });
     const impact = Math.max(0, Math.min(1, fraction * 4));
     // Respiração curta, distinta da voz áspera dos zumbis.
-    noise(o, { buf: pink, t: t + 0.025, dur: 0.16, a: 0.012, peak: 0.5, type: 'bandpass', f: rnd(950, 1250), f2: 500, q: 0.8 });
+    if (!vocal) noise(o, { buf: pink, t: t + 0.025, dur: 0.16, a: 0.012, peak: 0.5, type: 'bandpass', f: rnd(950, 1250), f2: 500, q: 0.8 });
     // impacto (soco no corpo)
     osc(o, { t, type: 'sine', f: 170 - impact * 35, f2: 55, dur: 0.09 + impact * 0.04, peak: 0.55 + impact * 0.35 });
     noise(o, { t, dur: 0.05, peak: 0.45 + impact * 0.2, type: 'lowpass', f: 1100, f2: 300 });
     noise(o, { buf: brown, t: t + 0.006, dur: 0.06 + impact * 0.05, peak: 0.25 + impact * 0.3, type: 'lowpass', f: 360, f2: 110 });
   },
-  reload() { if (!ctx) return; const t = ctx.currentTime; mech(t, 0, 0.5, 1900); mech(t + 0.18, 0, 0.4, 2600); mech(t + 0.36, 0, 0.6, 1500); },
-  empty() { if (!ctx || throttle('empty', 200)) return; mech(ctx.currentTime, 0, 0.5, 3200); },
+  equip(isGun) {
+    if (!ctx) return;
+    if (!playSample(isGun ? 'equip_gun' : 'draw_blade', { gain: 0.5 })) mech(ctx.currentTime, 0, 0.42);
+  },
+  reload(kind = 'pistola', finish = false) {
+    if (!ctx) return;
+    const rate = ({ smg: 1.16, escopeta: 0.78, fuzil: 0.88, precisao: 0.71 })[kind] || 1;
+    if (!finish) playSample('equip_gun', { gain: 0.3 });
+    const delay = finish ? 0 : 0.095;
+    if (!playSample(finish ? 'action_click' : 'latch', { gain: finish ? 0.53 : 0.4, rate, delay })) mech(ctx.currentTime + delay, 0, 0.5, 2200 * rate);
+  },
+  empty() { if (!ctx || throttle('empty', 200) || playSample('action_click', { gain: 0.29, rate: 1.27 })) return; mech(ctx.currentTime, 0, 0.5, 3200); },
   jump() {
     if (!ctx || throttle('jump', 80)) return;
+    playSample('cloth', { gain: 0.22 });
     const o = out({ gain: 0.32, rev: 0.03 });
     noise(o, { buf: pink, dur: 0.16, a: 0.012, peak: 0.45, type: 'bandpass', f: 850, f2: 2200, q: 1.2 });
     osc(o, { type: 'sine', f: 105, f2: 55, dur: 0.1, peak: 0.28 });
   },
   land() {
     if (!ctx || throttle('land', 80)) return;
+    playSample('land', { gain: 0.51, rate: 0.83 });
     const o = out({ gain: 0.36 });
     noise(o, { buf: brown, dur: 0.06, peak: 0.7, type: 'lowpass', f: 280, f2: 100, q: 0.8 });
     osc(o, { type: 'sine', f: 72, f2: 38, dur: 0.07, peak: 0.35 });
   },
-  dash() { if (!ctx) return; whoosh(0, false, true); noise(out({ gain: 0.2 }), { buf: pink, dur: 0.12, peak: 0.6, type: 'lowpass', f: 500 }); },
+  dash() { if (!ctx) return; playSample('cloth', { gain: 0.38, rate: 1.16 }); whoosh(0, false, true); noise(out({ gain: 0.2 }), { buf: pink, dur: 0.12, peak: 0.6, type: 'lowpass', f: 500 }); },
   nest() {
     if (!ctx) return;
+    if (playSample('nest', { gain: 0.84, rev: 0.25, rate: 0.86 })) return;
     const t = ctx.currentTime, o = out({ gain: 0.9, rev: 0.8 });
     noise(o, { buf: brown, t, dur: 1.4, peak: 1.2, type: 'lowpass', f: 600, f2: 90 });
     for (let i = 0; i < 6; i++) noise(o, { buf: pink, t: t + rnd(0, 0.6), dur: 0.15, peak: 0.6, type: 'bandpass', f: rnd(300, 900), f2: rnd(100, 300), q: 5 });
     voice(o, t, { f0: 90, f1: 40, dur: 1.4, formants: [[300, 4, 1], [700, 5, 0.6]], vib: 7, vibDepth: 10, breath: 0.3, dist: true });
   },
-  boss() { if (!ctx) return; roar(0); },
+  boss() { if (!ctx) return; if (!playSample('brute', { gain: 0.94, rev: 0.24 })) roar(0); },
   spit() {
     if (!ctx || throttle('spit', 120)) return;
+    playSample('sword_hit', { gain: 0.37, rate: 1.38 });
     const o = out({ gain: 0.35, rev: 0.1 });
     noise(o, { buf: pink, dur: 0.18, peak: 1, type: 'bandpass', f: 1800, f2: 500, q: 4 });
   },
-  loot() { if (!ctx || throttle('loot', 150)) return; const t = ctx.currentTime; const o = out({ gain: 0.25 }); for (let i = 0; i < 3; i++) noise(o, { buf: pink, t: t + i * 0.06, dur: 0.05, peak: 0.6, type: 'bandpass', f: rnd(800, 2000), q: 2 }); },
-  click() { if (!ctx) return; const o = out({ gain: 0.12 }); noise(o, { dur: 0.015, peak: 0.8, type: 'bandpass', f: 2500, q: 3 }); },
+  loot() { if (!ctx || throttle('loot', 150) || playSample('loot', { gain: 0.39 })) return; const t = ctx.currentTime; const o = out({ gain: 0.25 }); for (let i = 0; i < 3; i++) noise(o, { buf: pink, t: t + i * 0.06, dur: 0.05, peak: 0.6, type: 'bandpass', f: rnd(800, 2000), q: 2 }); },
+  click() { if (!ctx || playSample('click', { gain: 0.29 })) return; const o = out({ gain: 0.12 }); noise(o, { dur: 0.015, peak: 0.8, type: 'bandpass', f: 2500, q: 3 }); },
 };
 
 // ============================================================
 //  AMBIENTAÇÃO
 // ============================================================
+function addWind(scene) {
+  const buffer = samples.wind?.[0];
+  if (!buffer || scene.wind || scene.kind === 'menu') return;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer; source.loop = true;
+  const volume = ctx.createGain(), t = ctx.currentTime;
+  volume.gain.setValueAtTime(0, t);
+  volume.gain.linearRampToValueAtTime(scene.kind === 'port' ? 0.21 : scene.kind === 'camp' ? 0.08 : 0.14, t + 1.2);
+  source.connect(volume); volume.connect(scene.bus);
+  source.start(t, Math.random() * buffer.duration);
+  scene.wind = source; scene.nodes.push(source);
+}
 export function startAmbience(kind) {
   if (!ctx) { pendingAmb = kind; return; }
   if (amb && amb.kind === kind) return;
@@ -573,16 +645,26 @@ export function startAmbience(kind) {
   }
 
   // eventos aleatórios distantes
-  const timers = [];
+  const timers = new Set();
   const schedule = (fn, min, max) => {
-    const tick = () => { if (!amb || amb.bus !== bus) return; fn(); timers.push(setTimeout(tick, rnd(min, max) * 1000)); };
-    timers.push(setTimeout(tick, rnd(min, max) * 1000));
+    const next = () => {
+      const id = setTimeout(() => {
+        timers.delete(id);
+        if (!amb || amb.bus !== bus) return;
+        fn(); next();
+      }, rnd(min, max) * 1000);
+      timers.add(id);
+    };
+    next();
   };
   const far = (gain, rev = 0.9) => {
     const g = ctx.createGain(); g.gain.value = gain;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (p) { p.pan.value = rnd(-0.9, 0.9); g.connect(p); p.connect(bus); } else g.connect(bus);
-    const s = ctx.createGain(); s.gain.value = rev; g.connect(s); s.connect(reverbIn);
+    // A cauda também passa pelo volume do ambiente e termina com o mapa.
+    const delay = ctx.createDelay(); delay.delayTime.value = 0.092;
+    const reflection = ctx.createGain(); reflection.gain.value = rev * 0.14;
+    g.connect(delay); delay.connect(reflection); reflection.connect(bus);
     return g;
   };
   if (kind === 'camp') {
@@ -598,6 +680,7 @@ export function startAmbience(kind) {
     if (kind === 'suburb') schedule(() => dog(far(0.12)), 14, 28);
   }
   amb = { kind, bus, nodes, timers };
+  addWind(amb);
 }
 
 export function stopAmbience() {
@@ -618,6 +701,7 @@ function groanFar(o) {
   voice(o, ctx.currentTime, { f0: f, f1: f * 0.75, dur: rnd(1.2, 2.2), formants: [[450, 5, 1], [1000, 6, 0.5]], vib: 4, vibDepth: 6, breath: 0.2 });
 }
 function crow(o) {
+  if (playSample('bird', { bus: o })) return;
   const n = 1 + Math.floor(Math.random() * 3);
   for (let i = 0; i < n; i++) {
     const t = ctx.currentTime + i * rnd(0.35, 0.5);
@@ -625,6 +709,7 @@ function crow(o) {
   }
 }
 function creak(o) {
+  if (playSample('creak', { bus: o, rate: 0.86 })) return;
   const t = ctx.currentTime, d = rnd(0.8, 1.6);
   const src = ctx.createOscillator(); src.type = 'sawtooth';
   src.frequency.setValueAtTime(rnd(30, 50), t);

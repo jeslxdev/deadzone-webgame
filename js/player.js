@@ -221,7 +221,7 @@ export class Player {
         areaHit(this, { x: this.pos.x, z: this.pos.z, r: L.r, base: L.dmg, melee: true, knock: 12, stun: 1.6, heavy: true });
         g.effects.shock(this.pos.x, this.pos.z, L.r, 0xffb060); g.effects.shock(this.pos.x, this.pos.z, L.r * 0.6, 0xffffff);
         g.effects.particles(this.pos.x, 0.3, this.pos.z, 26, 0x5a5048, 9, 0.8, 1.8);
-        g.shake(0.8); g.hitStop(0.09); sfx.heavyStep(0, true); sfx.slash(true);
+        g.shake(0.8); g.hitStop(0.09); sfx.heavyStep(0, true); sfx.slash(true, this.profile.equipped.base);
       }
     } else {
       this.leapY = 0;
@@ -270,7 +270,7 @@ export class Player {
         const a = aimAng + (Math.random() - 0.5) * 0.6;
         const hit = this.hitAround(this.w.reach + 0.4, { ang: a, arc: 1.9 }, this.flurry.dmg, null, 2, 0.25);
         g.effects.slash(this.pos.x, this.pos.z, a, 1.9, this.w.reach + 0.5, 0xbfe6ff);
-        sfx.slash();
+        sfx.slash(false, this.profile.equipped.base);
         if (hit) g.hitStop(0.02);
         if (--this.flurry.n <= 0) this.flurry = null;
       }
@@ -278,7 +278,7 @@ export class Player {
 
     if (this.reloadT > 0) {
       this.reloadT -= dt;
-      if (this.reloadT <= 0) { this.ammo = this.w.mag; sfx.reload(); }
+      if (this.reloadT <= 0) { this.ammo = this.w.mag; sfx.reload(this.profile.equipped.base, true); }
     }
 
     const attacking = input.mouseDown(0) && !g.uiBlocking && !g.channel && !this.heavy && !this.flurry && !this.leap;
@@ -300,7 +300,7 @@ export class Player {
         this.spinTick = 0.25;
         this.hitAround(3.7, null, this.spinDmg || 15 * this.stats.skillPower, null, 3);
         g.effects.shock(this.pos.x, this.pos.z, 3.7, 0xbfe6ff);
-        sfx.slash();
+        sfx.slash(false, this.profile.equipped.base);
       }
     }
 
@@ -354,7 +354,7 @@ export class Player {
     g.effects.shock(x, z, 2.9, 0xffb060); g.effects.shock(x, z, 1.7, 0xffffff);
     g.effects.crack(x, z, 3.2);
     g.effects.particles(x, this.y + 0.2, z, 22, 0x6a6058, 7, 0.7, 1.6);
-    g.shake(0.6); sfx.heavyStep(0, true); sfx.slash(true);
+    g.shake(0.6); sfx.heavyStep(0, true); sfx.slash(true, this.profile.equipped.base);
     if (hit) g.hitStop(0.09);
   }
 
@@ -406,13 +406,13 @@ export class Player {
     this.refreshHolster();
     g.hud.refreshWeapon();
     g.hud.toast(`Arma na mão: <b>${itemName(next)}</b>`, 'dim', 1200);
-    sfx.reload();
+    sfx.equip(this.isGun);
   }
 
   startReload() {
     if (this.reloadT > 0) return;
     this.reloadT = this.w.reload / this.stats.atkSpeed;
-    sfx.reload();
+    sfx.reload(this.profile.equipped.base);
   }
 
   fire(ang) {
@@ -480,7 +480,7 @@ export class Player {
       hit = this.hitAround(reach, { ang, arc }, this.w.dmg, null, 4, 0.12, false);
       if (!g.fps) g.effects.slash(px + sx * 0.3, pz + sz * 0.3, ang, arc, reach + 0.3, this.profile.equipped.rarity >= 3 ? 0xffc8f0 : this.atkKind === 'rise' ? 0x9fe8ff : 0xe8f4ff, this.atkKind === 'rise' ? fy + 0.35 : fy, 0.4); // o rastro da lâmina é o destaque
     }
-    sfx.slash(finisher || dashStrike || this.w.dmg > 40 || !!this.w.pole);
+    sfx.slash(finisher || dashStrike || this.w.dmg > 40 || !!this.w.pole, this.profile.equipped.base);
     if (hit) g.hitStop(finisher ? 0.09 : dashStrike ? 0.07 : this.w.dmg > 40 ? 0.075 : 0.045);
   }
 
@@ -506,7 +506,7 @@ export class Player {
       g.effects.crack(fx, fz, 2.6);
       for (let i = 1; i <= 4; i++) g.effects.particles(this.pos.x + Math.sin(ang) * i * 0.8, this.y + 0.2, this.pos.z + Math.cos(ang) * i * 0.8, 4, 0x5a5048, 4, 0.5, 1.2); // fenda de poeira
       g.effects.particles(fx, this.y + 0.2, fz, 14, 0x5a5048, 6, 0.6, 1.4);
-      g.shake(0.4); sfx.slash(true); sfx.heavyStep(2, false);
+      g.shake(0.4); sfx.slash(true, this.profile.equipped.base); sfx.heavyStep(2, false);
       if (hit) g.hitStop(0.1);
     }
   }

@@ -1,3 +1,137 @@
 {
-  "_leia": "Sons personalizados (opcional). Coloque arquivos .ogg/.mp3/.wav nesta pasta e liste-os por evento. Use apenas sons que voce tem direito de usar (ex.: pacotes CC0). Eventos: zombie_say, zombie_hurt, zombie_death, player_hurt, sword_hit, step, shot_pistola, shot_smg, shot_escopeta, shot_fuzil, shot_precisao. Exemplo: \"zombie_say\": [\"zumbi1.ogg\", \"zumbi2.ogg\"]"
+  "_leia": "Sons personalizados (opcional). Coloque arquivos .ogg/.mp3/.wav nesta pasta e liste-os por evento. Use apenas sons que voce tem direito de usar (ex.: pacotes CC0). Eventos: zombie_say, zombie_hurt, zombie_death, player_hurt, sword_hit, step, shot_pistola, shot_smg, shot_escopeta, shot_fuzil, shot_precisao. Exemplo: \"zombie_say\": [\"zumbi1.ogg\", \"zumbi2.ogg\"]",
+  "_creditos": {
+    "vento": "Wind Loop, Jonathan Shaw (InspectorJ), loop por AntumDeluge, https://opengameart.org/content/wind-loop — CC BY 3.0, https://creativecommons.org/licenses/by/3.0/. Filtrado, convertido para mono e reamostrado.",
+    "lamina": "Swishes Sound Pack, artisticdude, https://opengameart.org/content/swishes-sound-pack — CC0. Recortes, sobreposição e equalização.",
+    "corte": "8 wet squish, slurp impacts, Independent.nu, https://opengameart.org/content/8-wet-squish-slurp-impacts — CC0. Recortes, sobreposição e equalização.",
+    "disparos": "Gunshot Sounds, Vincent Sevedge (Tabasco), 2009. https://opengameart.org/content/gunshot-sounds — CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Cortes, equalização, dinâmica e velocidade adaptados.",
+    "vozes": "Zombie moans, Darsycho, https://opengameart.org/content/zombie-moans e Zombie noises and moans, ianzazz, https://opengameart.org/content/zombie-noises-and-moans — CC0. Edição de duração, altura e timbre.",
+    "objetos": "RPG Audio e Interface Sounds, Kenney, CC0. https://kenney.nl/assets/rpg-audio e https://kenney.nl/assets/interface-sounds",
+    "personagem": "qubodup, 15 vocal male strain/hurt/pain/jump sounds, CC0. https://opengameart.org/content/15-vocal-male-strainhurtpainjump-sounds",
+    "aves": "IgnasD, Crows singing, CC0. https://opengameart.org/content/crows-singing. Trechos editados e equalizados.",
+    "explosoes": "Boom Pack 1, dklon, https://opengameart.org/content/boom-pack-1 — CC BY 3.0, https://creativecommons.org/licenses/by/3.0/. Cortes, fades e equalização.",
+    "criaturas": "RPG Sound Pack, artisticdude, https://opengameart.org/content/rpg-sound-pack — CC0. Cortes e equalização."
+  },
+  "wind": ["vento.ogg"],
+  "body_impact": ["chop.ogg"],
+  "sword_swing": [
+    "fio-1.ogg",
+    "fio-2.ogg",
+    "fio-3.ogg"
+  ],
+  "sword_hit": [
+    "corte-umido-1.ogg",
+    "corte-umido-2.ogg",
+    "corte-umido-3.ogg"
+  ],
+  "zombie_say": [
+    "gemido-01.ogg",
+    "gemido-02.ogg",
+    "gemido-03.ogg"
+  ],
+  "zombie_attack": [
+    "zumbi-ataque.ogg"
+  ],
+  "zombie_hurt": [
+    "zumbi-dor.ogg"
+  ],
+  "zombie_death": [
+    "zumbi-queda.ogg"
+  ],
+  "shot_pistola": [
+    "pistola-1.ogg",
+    "pistola-2.ogg"
+  ],
+  "shot_smg": [
+    "smg-1.ogg",
+    "smg-2.ogg"
+  ],
+  "shot_fuzil": [
+    "fuzil-1.ogg",
+    "fuzil-2.ogg"
+  ],
+  "shot_escopeta": [
+    "escopeta-1.ogg"
+  ],
+  "shot_precisao": [
+    "precisao-1.ogg"
+  ],
+  "step_city": [
+    "footstep00.ogg",
+    "footstep01.ogg",
+    "footstep02.ogg"
+  ],
+  "step_suburb": [
+    "footstep04.ogg",
+    "footstep05.ogg",
+    "footstep06.ogg"
+  ],
+  "step_port": [
+    "footstep07.ogg",
+    "footstep08.ogg"
+  ],
+  "step_military": [
+    "footstep03.ogg",
+    "footstep09.ogg"
+  ],
+  "cloth": [
+    "cloth2.ogg",
+    "cloth3.ogg"
+  ],
+  "draw_blade": [
+    "drawKnife1.ogg",
+    "drawKnife3.ogg"
+  ],
+  "equip_gun": [
+    "beltHandle1.ogg",
+    "beltHandle2.ogg"
+  ],
+  "latch": [
+    "metalLatch.ogg"
+  ],
+  "action_click": [
+    "metalClick.ogg"
+  ],
+  "land": [
+    "dropLeather.ogg"
+  ],
+  "loot": [
+    "handleSmallLeather.ogg",
+    "handleSmallLeather2.ogg"
+  ],
+  "pickup": [
+    "handleCoins.ogg"
+  ],
+  "creak": [
+    "creak1.ogg",
+    "creak2.ogg"
+  ],
+  "click": [
+    "click_002.ogg"
+  ],
+  "rare": [
+    "glass_002.ogg"
+  ],
+  "levelup": [
+    "confirmation_004.ogg"
+  ],
+  "player_hurt": [
+    "ferido-2.ogg",
+    "ferido-7.ogg",
+    "ferido-12.ogg"
+  ],
+  "bird": [
+    "corvo-1.ogg",
+    "corvo-2.ogg"
+  ],
+  "blast": [
+    "explosao-1.ogg",
+    "explosao-2.ogg"
+  ],
+  "brute": [
+    "bruto.ogg"
+  ],
+  "nest": [
+    "ninho.ogg"
+  ]
 }

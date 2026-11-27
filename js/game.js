@@ -157,7 +157,6 @@ export class Game {
     }
     if (made) {
       this.sharedBanner('UMA HORDA SE APROXIMA', 'warn', `${made} infectados vindo em sua direção`);
-      sfx.scream(); sfx.zombie(20, 0);
     }
   }
 

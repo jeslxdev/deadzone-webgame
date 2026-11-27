@@ -1138,53 +1138,67 @@ function wm(geo, material, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz =
   return m;
 }
 const bladeGeoCache = new Map();
-function bladeGeo(len, width, curve) {
-  const k = len + '_' + width + '_' + curve;
-  if (bladeGeoCache.has(k)) return bladeGeoCache.get(k);
-  const vertices = [], indices = [], sections = 16;
-  for (let i = 0; i <= sections; i++) {
-    const t = i / sections, cx = curve * t * t;
-    // Largura quase constante até a ponta, como uma lâmina forjada.
-    const tip = t < 0.82 ? 1 - t * 0.1 : Math.max(0.015, (1 - t) / 0.18 * 0.918);
-    const half = width * 0.5 * tip;
-    const thick = Math.max(0.001, 0.012 * (1 - t));
-    const y = -len * t;
-    vertices.push(cx - half, y, 0, cx, y, thick, cx + half, y, 0, cx, y, -thick);
-    if (i < sections) for (let j = 0; j < 4; j++) {
-      const n = i * 4 + j, next = i * 4 + (j + 1) % 4;
-      indices.push(n, n + 4, next, next, n + 4, next + 4);
+// A katana tem um só gume. O bisel, a face e o dorso encontram-se numa ponta assimétrica.
+const bladeProfiles = {
+  katana:    { width: 0.078, curve: 0.095, flare: -0.21, tip: 0.79 },
+  wakizashi: { width: 0.062, curve: 0.078, flare: -0.19, tip: 0.74 },
+  nodachi:   { width: 0.093, curve: 0.105, flare: -0.26, tip: 0.82 },
+  faca:      { width: 0.12, curve: 0.023, flare: 0.30, tip: 0.71 },
+  naginata:  { width: 0.09, curve: 0.19, flare: 0.14, tip: 0.68 },
+};
+function edgedBlade(id, len) {
+  const profile = bladeProfiles[id];
+  const key = id + '_' + len;
+  if (bladeGeoCache.has(key)) return bladeGeoCache.get(key);
+  const positions = [], colors = [];
+  const tones = [0xf4f8fd, 0x9eacb8, 0x677787, 0x9eacb8, 0xf4f8fd].map(c => new THREE.Color(c));
+  const ring = t => {
+    const center = profile.curve * len * t * t;
+    const width = profile.width * (1 + profile.flare * t);
+    const point = Math.max(0, 1 - (1 - t) / (1 - profile.tip));
+    const back = center + width * 0.48, edge = center - width * 0.52 + width * point ** 1.45;
+    const ridge = edge + (back - edge) * 0.34;
+    const depth = 0.009 * (1 - 0.5 * t) * (1 - point);
+    const y = -t * len;
+    return [[edge,y,0], [ridge,y,depth], [back,y,depth*0.61], [back,y,-depth*0.61], [ridge,y,-depth]];
+  };
+  function triangle(a, b, c, color) {
+    positions.push(...a, ...b, ...c);
+    for (let i = 0; i < 3; i++) colors.push(color.r, color.g, color.b);
+  }
+  const steps = 24;
+  for (let i = 0; i < steps; i++) {
+    const a = ring(i / steps), b = ring((i + 1) / steps);
+    for (let j = 0; j < a.length; j++) {
+      const k = (j + 1) % a.length;
+      triangle(a[j], b[j], a[k], tones[j]);
+      if (i + 1 < steps) triangle(a[k], b[j], b[k], tones[j]);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  g.setIndex(indices);
-  g.computeVertexNormals();
-  bladeGeoCache.set(k, g);
-  return g;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  bladeGeoCache.set(key, geometry);
+  return geometry;
 }
 
-function bladeFuller(len, curve) {
-  const key = 'fuller_' + len + '_' + curve;
-  if (bladeGeoCache.has(key)) return bladeGeoCache.get(key);
-  const points = [], indices = [];
-  for (let i = 0; i <= 12; i++) {
-    const t = 0.09 + (i / 12) * 0.69, x = curve * t * t, y = -len * t;
-    const z = 0.012 * (1 - t) + 0.001;
-    points.push(x - 0.004, y, z, x + 0.004, y, z);
-    if (i < 12) { const n = i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  geo.setIndex(indices); geo.computeVertexNormals();
-  bladeGeoCache.set(key, geo);
-  return geo;
+// Contorno lateral em coordenadas da arma: avanço e altura. O eixo X é a espessura.
+function gunProfile(key, contour, width) {
+  if (geoCache.has(key)) return geoCache.get(key);
+  const shape = new THREE.Shape(contour.map(([forward, height]) => new THREE.Vector2(forward, height)));
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: true,
+    bevelSegments: 1, steps: 1, bevelSize: 0.004, bevelThickness: 0.003 });
+  geometry.applyMatrix4(new THREE.Matrix4().set(0, 0, -1, width / 2, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
+  geoCache.set(key, geometry);
+  return geometry;
 }
 
 export function buildWeapon(baseId, rarity = 0) {
   const b = WEAPONS[baseId];
   const g = new THREE.Group();
-  const metal = wmat('metal', () => mat(0x2b2d30, { metalness: 0.7, roughness: 0.35 }));
-  const metal2 = wmat('metal2', () => mat(0x4a4d52, { metalness: 0.7, roughness: 0.4 }));
+  const metal = wmat('metal', () => mat(0x35404a, { metalness: 0.48, roughness: 0.38 }));
+  const metal2 = wmat('metal2', () => mat(0x596470, { metalness: 0.52, roughness: 0.36 }));
   const wood = wmat('wood', () => mat(0x6b4423, { roughness: 0.7 }));
   const rcol = RARITIES[rarity].hex;
   const glow = [0, 0, 0.3, 0.6, 1.1][rarity];
@@ -1198,89 +1212,86 @@ export function buildWeapon(baseId, rarity = 0) {
     const grip = wmat('gunGrip', () => mat(0x17191c, { roughness: 0.9 }));
     const receiverY = -L * (pistol ? 0.38 : 0.29);
     const bodyLen = Math.max(0.16, L * (pistol ? 0.65 : 0.43));
-    g.add(wm(capsule(0.052, bodyLen * 0.78), metal2, 0, receiverY, 0.055, 0, 0, 0, 1.04, 1, 1.12));
-    g.add(wm(box(0.085, bodyLen * 0.68, 0.075), metal, 0, receiverY, 0.066));
-    for (const side of [-1, 1]) {
-      g.add(wm(box(0.008, bodyLen * 0.78, 0.082), metal, side * 0.065, receiverY, 0.057));
-      g.add(wm(box(0.008, bodyLen * 0.46, 0.009), accent, side * 0.071, receiverY - bodyLen * 0.09, 0.102));
-      for (let j = 0; j < 3; j++) g.add(wm(box(0.009, 0.012, 0.018), grip, side * 0.073, receiverY + bodyLen * (0.24 - j * 0.13), 0.07));
-    }
-    // Empunhadura fica no centro dos dedos, sem cruzar o antebraço.
-    g.add(wm(capsule(0.037, 0.09), grip, 0, 0.013, -0.06, -0.28, 0, 0, 1, 1, 1.1));
-    g.add(wm(box(0.08, 0.015, 0.08), metal, 0, 0.104, -0.047));
+    const profile = (part, points, width, material) => g.add(wm(gunProfile(baseId + ':' + part, points, width), material, 0, 0, 0));
+    const bodyEnd = pistol ? L * 0.98 : L * 0.55;
+    profile('receiver', [[-0.065,0.022],[bodyEnd-0.025,0.022],[bodyEnd,0.045],[bodyEnd,0.098],
+      [bodyEnd-0.014,0.113],[-0.055,0.113],[-0.073,0.089]], pistol ? 0.082 : 0.096, metal2);
+    profile('grip', [[-0.045,0.035],[0.035,0.035],[0.012,-0.085],[-0.012,-0.143],
+      [-0.082,-0.13],[-0.080,-0.105]], 0.056, grip);
+    for (let k = 0; k < 3; k++) g.add(wm(box(0.066,0.059,0.006),metal,0,0.028+k*0.005,-0.058-k*0.019));
     g.add(wm(C, metal, 0, -L * 0.75, 0.07, 0, 0, 0, shotgun ? 0.033 : 0.024, L * 0.48, shotgun ? 0.033 : 0.024));
     g.add(wm(C, grip, 0, -L + 0.015, 0.07, 0, 0, 0, shotgun ? 0.039 : 0.03, 0.035, shotgun ? 0.039 : 0.03));
     g.add(wm(C, metal2, 0, -L - 0.003, 0.07, 0, 0, 0, 0.016, 0.006, 0.016));
     if (!pistol) {
       g.add(wm(box(0.105, Math.max(0.13, L * 0.24), 0.095), shotgun ? wood : metal, 0, -L * 0.58, 0.045));
-      for (let j = 0; j < 4; j++) g.add(wm(box(0.09, 0.008, 0.008), grip, 0, -L * 0.5 - j * 0.024, 0.096));
-      g.add(wm(box(0.08, 0.22, 0.075), shotgun ? wood : grip, 0, 0.19, 0.035, 0.22));
-      g.add(wm(box(0.115, 0.025, 0.10), grip, 0, 0.3, 0.028, 0.22));
-      g.add(wm(box(0.062, 0.11, 0.075), metal, 0, -L * 0.17, -0.048, -0.16));
-      g.add(wm(box(0.046, 0.08, 0.009), accent, 0, -L * 0.17, -0.09, -0.16));
-      g.add(wm(box(0.055, L * 0.37, 0.014), grip, 0, -L * 0.36, 0.128));
-      for (let j = 0; j < 4; j++) g.add(wm(box(0.08, 0.01, 0.008), metal2, 0, -L * 0.24 - j * 0.03, 0.139));
+      for (let j = 0; j < 5; j++) g.add(wm(box(0.11, 0.008, 0.085), grip, 0, -L * 0.49 - j * L * 0.045, 0.049));
+      if (baseId === 'smg') {
+        for (const side of [-1, 1]) g.add(wm(box(0.014,0.25,0.018),metal2,side*0.026,0.16,0.063));
+        g.add(wm(box(0.072,0.026,0.106),grip,0,0.28,0.024));
+      } else {
+        profile('stock', [[-0.048,0.092],[-0.18,0.085],[-0.32,0.06],[-0.32,-0.088],
+          [-0.27,-0.084],[-0.13,0.002],[-0.048,0.012]], sniper ? 0.083 : 0.072, shotgun || sniper ? wood : grip);
+      }
+      if (baseId === 'fuzil') profile('mag', [[0.09,0.035],[0.19,0.035],[0.19,-0.07],[0.225,-0.16],
+        [0.15,-0.18],[0.108,-0.09]],0.053,metal2);
+      if (baseId === 'smg') profile('mag', [[0.065,0.025],[0.119,0.025],[0.143,-0.175],[0.084,-0.175]],0.044,metal2);
+      if (sniper) profile('mag', [[0.09,0.03],[0.19,0.03],[0.18,-0.055],[0.096,-0.055]],0.055,metal);
+      g.add(wm(box(0.055, L * 0.37, 0.014), grip, 0, -L * 0.36, 0.118));
+      for (let j = 0; j < 4; j++) g.add(wm(box(0.064, 0.01, 0.008), metal2, 0, -L * 0.24 - j * 0.03, 0.128));
       if (shotgun) g.add(wm(C, metal2, 0, -L * 0.73, 0.018, 0, 0, 0, 0.018, L * 0.35, 0.018));
     } else {
-      g.add(wm(box(0.105, 0.055, 0.11), grip, 0, -L * 0.65, 0.06));
-      for (let j = 0; j < 3; j++) g.add(wm(box(0.11, 0.007, 0.009), grip, 0, -L * 0.55 - j * 0.022, 0.124));
+      for (const side of [-1,1]) {
+        for (let j = 0; j < 5; j++) g.add(wm(box(0.005, 0.006, 0.04), grip, side*0.044, 0.022-j*0.014, 0.073, -0.13));
+      }
     }
     // Alça, massa e óptica acompanham o cano.
     const triggerGuard = wm(new THREE.TorusGeometry(0.035, 0.005, 6, 16), metal, 0, -L * 0.12, -0.023);
     triggerGuard.rotation.y = Math.PI / 2;
     triggerGuard.scale.y = 0.72;
     g.add(triggerGuard);
-    g.add(wm(box(0.045, 0.02, 0.035), metal, 0, receiverY + bodyLen * 0.25, 0.14));
-    g.add(wm(box(0.018, 0.012, 0.026), metal, 0, -L * 0.91, 0.115));
+    g.add(wm(box(0.045, 0.02, 0.024), metal, 0, receiverY + bodyLen * 0.25, 0.12));
+    g.add(wm(box(0.018, 0.018, pistol ? 0.018 : 0.041), metal, 0, -L * 0.91, pistol ? 0.12 : 0.105));
     if (sniper) {
       const lens = wmat('lens', () => mat(0x345a78, { emissive: 0x112e45, metalness: 0.5, roughness: 0.1 }));
       g.add(wm(C, metal, 0, -L * 0.37, 0.185, 0, 0, 0, 0.04, 0.3, 0.04));
       g.add(wm(C, lens, 0, -L * 0.37 - 0.15, 0.185, 0, 0, 0, 0.032, 0.008, 0.032));
-      g.add(wm(box(0.038, 0.04, 0.045), metal2, 0, -L * 0.37, 0.14));
+      for (const offset of [-0.086,0.086]) {
+        g.add(wm(box(0.042, 0.029, 0.048), metal2, 0, -L * 0.37+offset, 0.14));
+        g.add(wm(C, grip, 0, -L * 0.37+offset, 0.185, 0, 0, 0, 0.044, 0.022, 0.044));
+      }
+      g.add(wm(C, metal2, 0, -L*0.37-0.133, 0.185, 0,0,0, 0.049,0.033,0.049));
     }
     // Detalhes funcionais legíveis mesmo na câmera superior.
     const dark = wmat('gunDark', () => mat(0x0d1012, { metalness: 0.45, roughness: 0.65 }));
     const worn = wmat('gunWorn', () => mat(0x777a78, { metalness: 0.75, roughness: 0.42 }));
     // Boca escura, anel de metal e massa de mira.
     g.add(wm(C, dark, 0, -L - 0.007, 0.07, 0, 0, 0, 0.011, 0.004, 0.011));
-    g.add(wm(box(0.012, 0.025, 0.012), worn, 0, -L * 0.87, 0.127));
+    g.add(wm(box(0.012, 0.012, 0.007), worn, 0, -L * 0.91, pistol ? 0.13 : 0.128));
     // Janela de ejeção e alavanca no lado direito do mecanismo.
-    g.add(wm(box(0.004, bodyLen * 0.24, 0.025), dark, 0.075, receiverY - bodyLen * 0.08, 0.077));
-    g.add(wm(box(0.019, 0.018, 0.012), worn, 0.081, receiverY + bodyLen * 0.12, 0.071));
+    g.add(wm(box(0.004, bodyLen * 0.24, 0.025), dark, 0.052, receiverY - bodyLen * 0.08, 0.077));
+    g.add(wm(box(0.019, 0.018, 0.012), worn, 0.056, receiverY + bodyLen * 0.12, 0.071));
     // Gatilho dentro do guarda-mato.
     g.add(wm(box(0.008, 0.012, 0.032), worn, 0, -L * 0.12, -0.025, -0.25));
-    if (baseId === 'smg') {
-      g.add(wm(box(0.055, 0.065, 0.15), grip, 0, -L * 0.26, -0.09, -0.12));
-      g.add(wm(box(0.08, 0.15, 0.025), metal2, 0, 0.23, 0.07));
-    } else if (baseId === 'fuzil') {
-      g.add(wm(box(0.06, 0.085, 0.13), grip, 0, -L * 0.21, -0.085, -0.2));
-      for (let i = 0; i < 3; i++) g.add(wm(box(0.004, 0.035, 0.006), worn, 0.032, -L * 0.2, -0.06 - i * 0.025));
+    if (baseId === 'fuzil' || baseId === 'smg') {
+      for (const side of [-1,1]) g.add(wm(box(0.005,bodyLen*0.67,0.013),accent,side*0.052,receiverY,0.074));
     } else if (shotgun) {
       for (let i = 0; i < 5; i++) g.add(wm(box(0.11, 0.007, 0.008), dark, 0, -L * 0.51 - i * 0.021, 0.098));
-    } else if (pistol) {
-      for (let i = 0; i < 5; i++) g.add(wm(box(0.005, 0.006, 0.04), worn, 0.074, receiverY + bodyLen * 0.18 - i * 0.012, 0.07));
     }
     muzzle.position.set(0, -L - 0.01, 0.07);
   } else {
     const L = b.len;
-    const bladeMat = wmat('blade' + rarity, () => mat(0xdfe5ea, { metalness: 0.9, roughness: 0.2, emissive: rcol, emissiveIntensity: glow }));
+    const bladeMat = wmat('edgedSteel' + rarity, () => mat(0xffffff, { vertexColors: true, metalness: 0.57, roughness: 0.24, emissive: rcol, emissiveIntensity: glow }));
     const handle = wmat('handle', () => mat(0x1c1c22, { roughness: 0.6 }));
     const gold = wmat('gold', () => mat(0xb08d3a, { metalness: 0.8, roughness: 0.3 }));
     if (b.pole) {
       g.add(wm(C, wmat('pole', () => mat(0x4a3520)), 0, -L / 2 + 0.45, 0, 0, 0, 0, 0.026, L, 0.026));
       g.add(wm(C, gold, 0, -L + 0.48, 0, 0, 0, 0, 0.034, 0.05, 0.034));
-      g.add(wm(bladeGeo(0.52, 0.07, 0.06), bladeMat, 0, -L + 0.46, 0));
+      g.add(wm(edgedBlade(baseId, 0.52), bladeMat, 0, -L + 0.46, 0));
     } else {
       g.add(wm(C, handle, 0, -0.02, 0, 0, 0, 0, 0.026, 0.26, 0.026));
       g.add(wm(S, gold, 0, 0.12, 0, 0, 0, 0, 0.032, 0.022, 0.032));
       g.add(wm(C, gold, 0, -0.155, 0, 0, 0, 0, 0.053, 0.014, 0.048));
-      const curve = b.wide ? 0.02 : baseId === 'faca' ? 0.01 : 0.05 * L;
-      g.add(wm(bladeGeo(L, b.wide ? 0.13 : 0.075, curve), bladeMat, 0, -0.165, 0));
-      const fuller = wmat('bladeFuller', () => mat(0x7f8c92, { metalness: 0.8, roughness: 0.4, side: THREE.DoubleSide }));
-      g.add(wm(bladeFuller(L, curve), fuller, 0, -0.165, 0));
-      // Espinha e canal de alívio distinguem a lâmina do cabo e da guarda.
-      const steelEdge = wmat('steelEdge', () => mat(0xf6f7f4, { metalness: 0.95, roughness: 0.13 }));
-      g.add(wm(box(0.003, L * 0.5, 0.002), steelEdge, b.wide ? -0.035 : -0.013, -0.22 - L * 0.25, 0.004, 0, 0, -curve * 0.1));
+      g.add(wm(edgedBlade(baseId, L), bladeMat, 0, -0.165, 0));
       for (let i = 0; i < 5; i++) {
         const wrap = wmat('gripWrap', () => mat(0x4e4240, { roughness: 0.9 }));
         g.add(wm(box(0.058, 0.008, 0.053), wrap, 0, 0.052 - i * 0.041, 0, 0, 0, i % 2 ? 0.2 : -0.2));
@@ -1293,14 +1304,16 @@ export function buildWeapon(baseId, rarity = 0) {
           const band = wm(C, wrap, 0, 0.045 - i * 0.037, 0, 0, 0, 0, 0.031, 0.009, 0.031);
           band.rotation.z = i % 2 ? 0.3 : -0.3; g.add(band);
         }
-        g.add(wm(C, metal2, 0, -0.34, 0, 0, 0, 0, 0.035, 0.018, 0.035));
         // Reforço junto à guarda e losangos claros no trançado do cabo.
         g.add(wm(C, gold, 0, -0.19, 0, 0, 0, 0, 0.038, 0.05, 0.038));
         const cord = wmat('katanaCord', () => mat(0xd3c6aa, { roughness: 0.9 }));
         for (let i = 0; i < 4; i++) g.add(wm(box(0.021, 0.018, 0.006), cord, 0, 0.04 - i * 0.042, 0.03, 0, 0, Math.PI / 4));
-      } else if (baseId !== 'faca') {
-        const spine = wm(C, metal2, 0, -Math.max(0.35, L * 0.56), 0.021, 0, 0, 0, 0.009, L * 0.62, 0.008);
-        g.add(spine);
+      } else if (baseId === 'nodachi') {
+        g.add(wm(C, handle, 0, 0.18, 0, 0, 0, 0, 0.027, 0.19, 0.027));
+        g.add(wm(C, gold, 0, 0.275, 0, 0, 0, 0, 0.029, 0.012, 0.029));
+      } else if (baseId === 'faca') {
+        for (const side of [-1,1]) g.add(wm(box(0.058,0.205,0.012),wood,0,-0.012,side*0.027));
+        for (const y of [-0.073,0.052]) g.add(wm(S,gold,0,y,0,0,0,0,0.009,0.009,0.036));
       }
     }
     muzzle.position.set(0, -L, 0);
