@@ -17,10 +17,12 @@ import { loadModels } from './models.js';
 import { isTouch, lowPower } from './device.js';
 import { initAudio, startAmbience, startMusic, stopMusic } from './audio.js';
 import { createPost } from './post.js';
+import { createAutoQuality } from './perf.js';
 
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, lowPower ? 1 : 1.5));
+// escala de renderização ajustada sozinha pelo FPS (ver perf.js)
+const quality = createAutoQuality(renderer, () => resize());
 if (isTouch) document.body.dataset.touch = '1';
 // Celular: impede o zoom da página por duplo toque e por pinça (mesmo com
 // "forçar zoom" do Chrome), sem bloquear rolagem de menus nem campos de texto.
@@ -38,7 +40,7 @@ if (isTouch) {
 }
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = lowPower ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; // sombra suave custa caro no celular
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
@@ -48,7 +50,7 @@ const overlay = document.getElementById('overlay');
 const octx = overlay.getContext('2d');
 
 const app = {
-  renderer, overlay, octx, post,
+  renderer, overlay, octx, post, quality,
   // desenha a cena com o acabamento de imagem (ou direto, se desligado)
   draw(scene, camera) {
     if (scene.environment !== post.envTex) post.applyEnvironment(scene, scene.userData.envIntensity ?? 0.3);
@@ -59,6 +61,7 @@ const app = {
   profile: null,
   go(name, args = {}) {
     if (this.screen) { this.screen.dispose(); this.screen = null; }
+    quality.settle(); // a troca de tela gera picos de carga: não conta para a resolução
     octx.clearRect(0, 0, overlay.width, overlay.height);
     document.body.dataset.screen = name;
     this.screenName = name;
@@ -171,7 +174,9 @@ resize();
 let last = performance.now();
 let fpsAcc = 0, fpsN = 0;
 function frame(t) {
-  const dt = Math.min(0.05, (t - last) / 1000);
+  const raw = (t - last) / 1000;
+  quality.tick(raw);
+  const dt = Math.min(0.05, raw);
   last = t;
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 1) { app.fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }

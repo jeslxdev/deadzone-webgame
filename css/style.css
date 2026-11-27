@@ -590,3 +590,29 @@ body[data-touch] #menu .mm-panel { touch-action: pan-y; }
   body[data-touch][data-screen="game"] .feedback-launch { top: calc(204px + env(safe-area-inset-top, 0px)); left: auto; right: max(8px, env(safe-area-inset-right)); }
   body[data-touch] .t-rotate-hint { top: 46%; max-width: 92vw; white-space: normal; font-size: 12px; }
 }
+
+/* ============================================================
+   CELULAR EM PÉ — pilha do topo sem sobreposição (regra final)
+   1) painel do jogador + minimapa  2) objetivos  3) zona segura
+   4) ferramentas (zoom, câmera, mochila...)  5) sala co-op
+   O botão de feedback some durante a partida (segue no menu/acampamento).
+   ============================================================ */
+@media (orientation: portrait) {
+  body[data-touch][data-screen="game"] { --sat: env(safe-area-inset-top, 0px); }
+  body[data-touch][data-screen="game"] .hud-tl { top: calc(8px + var(--sat)); width: min(168px, calc(100vw - 124px)); }
+  body[data-touch][data-screen="game"] .hud-tr { top: calc(8px + var(--sat)); }
+  body[data-touch][data-screen="game"] .hud-top { top: calc(106px + var(--sat)); width: calc(100vw - 16px); max-width: calc(100vw - 16px); gap: 4px; }
+  body[data-touch][data-screen="game"] .safe-tag { top: calc(134px + var(--sat)); font-size: 11px; white-space: nowrap; }
+  body[data-touch][data-screen="game"] .t-top { top: 154px; left: 8px; right: auto; gap: 6px; }
+  body[data-touch][data-screen="game"] .t-mini { width: 36px; height: 36px; min-width: 36px; font-size: 20px; }
+  body[data-touch][data-screen="game"] .party { top: calc(198px + var(--sat)); width: min(220px, calc(100vw - 16px)); }
+  body[data-touch][data-screen="game"] .banner { top: 34%; width: 94vw; }
+  body[data-touch][data-screen="game"] .banner .b-title { font-size: min(30px, 8vw); white-space: nowrap; }
+  body[data-touch][data-screen="game"] .banner.map .b-title { font-size: min(34px, 8.6vw); }
+  body[data-touch][data-screen="game"] #toasts { top: calc(198px + var(--sat)); right: 8px; max-width: 46vw; }
+  body[data-touch][data-screen="game"] .feedback-launch { display: none; }
+}
+/* celular deitado: feedback também fora da partida para não cobrir os botões */
+@media (orientation: landscape) {
+  body[data-touch][data-screen="game"] .feedback-launch { display: none; }
+}
