@@ -201,6 +201,8 @@ function gunshot(kind, pan = 0) {
   const o = out({ gain: G.gain, pan, rev: G.rev, echo: G.echo });
   // estalo supersônico (transiente)
   noise(o, { t, dur: 0.018, peak: G.crack, type: 'highpass', f: 3000 * v, q: 0.5 });
+  // Primeiro impulso seco e breve ruído mecânico dão ataque ao disparo.
+  noise(o, { t, dur: 0.006, peak: 0.45, type: 'bandpass', f: 4200 * v, q: 0.8 });
   // corpo da explosão do cartucho
   noise(o, { t, dur: G.bodyDur, peak: 1.1, type: 'lowpass', f: G.body * v, f2: G.body * 0.25, q: 1.2 });
   noise(o, { t, dur: G.bodyDur * 0.6, peak: 0.5, type: 'bandpass', f: 700 * v, q: 1.5 });
@@ -417,7 +419,7 @@ function footstep(run, theme) {
 
 // ---------- API pública ----------
 export const sfx = {
-  shot(kind, pan = 0) { if (!ctx || throttle('shot', 30)) return; if (playSample('shot_' + kind, { gain: 0.8, rev: 0.3 })) return; gunshot(kind, pan); },
+  shot(kind, pan = 0) { if (!ctx || throttle('shot', 30)) return; if (playSample('shot_' + kind, { gain: 0.8, pan, rev: 0.3 })) return; gunshot(kind, pan); },
   slash(big = false) { if (!ctx || throttle('slash', 50)) return; whoosh(0, true, big); },
   swing() { if (!ctx || throttle('slash', 50)) return; whoosh(0, false); },
   hit(heavy = false) { if (!ctx || throttle('hit', 35)) return; fleshHit(0, heavy); },
@@ -448,6 +450,8 @@ export const sfx = {
     const o = out({ gain: 0.35 });
     noise(o, { dur: 0.05, peak: 0.8, type: 'lowpass', f: 900, f2: 300 });
     noise(o, { buf: pink, dur: 0.08, peak: 0.5, type: 'lowpass', f: 700, f2: 250, q: 7 });
+    noise(o, { dur: 0.012, peak: 0.35, type: 'bandpass', f: rnd(1400, 2100), q: 1.2 });
+    osc(o, { type: 'sine', f: rnd(125, 160), f2: 55, dur: 0.055, peak: 0.3 });
   },
   step(run = 0, theme = 'city') { if (!ctx) return; if (playSample('step', { gain: run ? 0.5 : 0.35 })) return; footstep(run, theme); },
   heavyStep(dist = 10, boss = false) {

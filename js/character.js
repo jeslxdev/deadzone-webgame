@@ -1219,6 +1219,28 @@ export function buildWeapon(baseId, rarity = 0) {
       g.add(wm(C, lens, 0, -L * 0.37 - 0.15, 0.185, 0, 0, 0, 0.032, 0.008, 0.032));
       g.add(wm(box(0.038, 0.04, 0.045), metal2, 0, -L * 0.37, 0.14));
     }
+    // Detalhes funcionais legíveis mesmo na câmera superior.
+    const dark = wmat('gunDark', () => mat(0x0d1012, { metalness: 0.45, roughness: 0.65 }));
+    const worn = wmat('gunWorn', () => mat(0x777a78, { metalness: 0.75, roughness: 0.42 }));
+    // Boca escura, anel de metal e massa de mira.
+    g.add(wm(C, dark, 0, -L - 0.007, 0.07, 0, 0, 0, 0.011, 0.004, 0.011));
+    g.add(wm(box(0.012, 0.025, 0.012), worn, 0, -L * 0.87, 0.127));
+    // Janela de ejeção e alavanca no lado direito do mecanismo.
+    g.add(wm(box(0.004, bodyLen * 0.24, 0.025), dark, 0.075, receiverY - bodyLen * 0.08, 0.077));
+    g.add(wm(box(0.019, 0.018, 0.012), worn, 0.081, receiverY + bodyLen * 0.12, 0.071));
+    // Gatilho dentro do guarda-mato.
+    g.add(wm(box(0.008, 0.012, 0.032), worn, 0, -L * 0.12, -0.025, -0.25));
+    if (baseId === 'smg') {
+      g.add(wm(box(0.055, 0.065, 0.15), grip, 0, -L * 0.26, -0.09, -0.12));
+      g.add(wm(box(0.08, 0.15, 0.025), metal2, 0, 0.23, 0.07));
+    } else if (baseId === 'fuzil') {
+      g.add(wm(box(0.06, 0.085, 0.13), grip, 0, -L * 0.21, -0.085, -0.2));
+      for (let i = 0; i < 3; i++) g.add(wm(box(0.004, 0.035, 0.006), worn, 0.032, -L * 0.2, -0.06 - i * 0.025));
+    } else if (shotgun) {
+      for (let i = 0; i < 5; i++) g.add(wm(box(0.11, 0.007, 0.008), dark, 0, -L * 0.51 - i * 0.021, 0.098));
+    } else if (pistol) {
+      for (let i = 0; i < 5; i++) g.add(wm(box(0.005, 0.006, 0.04), worn, 0.074, receiverY + bodyLen * 0.18 - i * 0.012, 0.07));
+    }
     muzzle.position.set(0, -L - 0.01, 0.07);
   } else {
     const L = b.len;
