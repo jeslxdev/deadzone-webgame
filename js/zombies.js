@@ -42,6 +42,7 @@ export class Zombie {
     this.facing = Math.random() * Math.PI * 2;
     this.home = { x, z };
     this.nest = opts.nest || null;
+    this.riseT = opts.nest ? 0.9 : 0; // nasce do ninho: emerge do chão
     this.state = opts.dormant ? 'dormant' : 'wander';
     this.remote = !!opts.remote;
     this.aggro = false;
@@ -358,6 +359,7 @@ export class Zombie {
     if (wantFace !== null) this.facing = angleLerp(this.facing, wantFace, Math.min(1, dt * 8));
     this.animate(dt, moving ? Math.hypot(vx, vz) : 0);
     rig.root.position.set(this.pos.x, 0, this.pos.z);
+    if (this.riseT > 0) { this.riseT = Math.max(0, this.riseT - dt); const k = this.riseT / 0.9; rig.root.position.y = -1.9 * k * k; }
     rig.root.rotation.y = this.facing;
     return false;
   }

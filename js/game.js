@@ -199,7 +199,13 @@ export class Game {
       const pos = w.walkableNear(n.x, n.z, n.mother ? 9 : 5);
       if (!pos) continue;
       const z = this.spawnZombie(this.randomType(), 'normal', pos.x, pos.z, { nest: n });
-      if (z) { n.children++; z.home = { x: n.x, z: n.z }; this.effects.particles(pos.x, 0.3, pos.z, 8, 0x8a2aff, 3, 0.6, 1, 4); }
+      if (z) {
+        n.children++; z.home = { x: n.x, z: n.z };
+        // brota do chão: rachadura, terra em blocos e respingo roxo
+        this.effects.crack(pos.x, pos.z, 1.6);
+        this.effects.particles(pos.x, 0.2, pos.z, 10, 0x3a2a22, 4, 0.7, 1.4, 12);
+        this.effects.particles(pos.x, 0.3, pos.z, 8, 0x8a2aff, 3, 0.6, 1, 4);
+      }
     }
     this.hordeT -= dt;
     if (this.hordeT <= 0) { this.hordeT = rand(70, 110) / (1 + this.mapDef.level * 0.03); this.spawnHorde(); }

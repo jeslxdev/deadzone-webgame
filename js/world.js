@@ -13,6 +13,7 @@ import { lowPower } from './device.js';
 import { makeFlames, makeFirePit, asphaltBump } from './camp.js';
 import { PIX, facadePix } from './pixtex.js';
 import { buildSafeBase } from './base.js';
+import { nestMesh, motherSpire, shieldMesh } from './nest.js';
 
 const P = 34, ROAD = 8, BLOCK = P - ROAD;
 const CELL = 1;
@@ -135,42 +136,7 @@ function containerMesh(type, r) {
   return { g, w, d, h };
 }
 
-// ---------- Ninho de zumbis ----------
-function nestMesh(mother) {
-  const g = new THREE.Group();
-  const fleshTex = PIX.flesh();
-  const flesh = mat(0xffffff, { map: fleshTex, roughness: 0.6, emissive: 0xb050ff, emissiveMap: fleshTex, emissiveIntensity: 0.4 });
-  const vein = new THREE.MeshBasicMaterial({ color: 0xc040ff });
-  const goo = new THREE.Mesh(new THREE.CircleGeometry(mother ? 7 : 3.6, 24), new THREE.MeshStandardMaterial({ color: 0x3a0f3a, roughness: 0.3, transparent: true, opacity: 0.85 }));
-  goo.rotation.x = -Math.PI / 2; goo.position.y = 0.03; goo.receiveShadow = true;
-  g.add(goo);
-  const core = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 2.2), flesh);
-  core.position.y = 1.1; core.scale.set(1, 1.25, 1); core.castShadow = true;
-  g.add(core);
-  // gaiola de arestas brilhantes em volta do cubo
-  const veins = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.4, 2.4, 2.4)), new THREE.LineBasicMaterial({ color: 0xc040ff, transparent: true, opacity: 0.8 }));
-  veins.position.copy(core.position); veins.scale.copy(core.scale);
-  g.add(veins);
-  const tGeo = new THREE.BoxGeometry(0.34, 2.4, 0.34);
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    const t = new THREE.Mesh(tGeo, flesh);
-    t.position.set(Math.cos(a) * 1.5, 0.9, Math.sin(a) * 1.5);
-    t.rotation.z = Math.cos(a) * 0.7; t.rotation.x = -Math.sin(a) * 0.7;
-    t.castShadow = true;
-    g.add(t);
-  }
-  const eggGeo = new THREE.BoxGeometry(0.46, 0.46, 0.46);
-  for (let i = 0; i < 6; i++) {
-    const a = Math.random() * Math.PI * 2, rr = 2 + Math.random() * 1.2;
-    const e = new THREE.Mesh(eggGeo, flesh);
-    e.position.set(Math.cos(a) * rr, 0.25, Math.sin(a) * rr);
-    e.scale.y = 1.3;
-    g.add(e);
-  }
-  if (mother) g.scale.setScalar(2.1);
-  return { g, core, veins, flesh };
-}
+// ---------- Ninho de zumbis: ver nest.js (spawner em blocos com pixel art) ----------
 
 // ============================================================
 export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
@@ -602,7 +568,9 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     const a = (k / 8) * Math.PI * 2 + 0.3, rr = 10.5;
     const x = motherPos.x + Math.cos(a) * rr, z = motherPos.z + Math.sin(a) * rr;
     const h = rand(2.5, 4.5, r);
-    addPlain(0, 0, 0, x, h / 2, z, 0x4a1a2a, { geo: new THREE.CylinderGeometry(0.3, 0.8, h, 6) });
+    const spire = motherSpire(h, r); // pilar de carne/pedra em blocos (nest.js)
+    spire.position.set(x, 0, z); spire.rotation.y = -a + Math.PI / 2;
+    group.add(spire);
     addCollider(x - 0.6, z - 0.6, x + 0.6, z + 0.6, h);
   }
 
@@ -844,10 +812,15 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
       } else if (t === 'safehouse') {
         g.fillStyle = '#5a4a38'; g.fillRect(X(x0) + 6, X(z0) + 6, B * ppu - 12, B * ppu - 12);
       } else if (t === 'mother' || t === 'nest') {
-        const cx = X(x0 + B / 2), cz = X(z0 + B / 2), rad = (t === 'mother' ? 14 : 8) * ppu;
-        const grd = g.createRadialGradient(cx, cz, 0, cx, cz, rad);
-        grd.addColorStop(0, 'rgba(70,10,70,0.95)'); grd.addColorStop(0.6, 'rgba(50,10,50,0.6)'); grd.addColorStop(1, 'rgba(40,10,40,0)');
-        g.fillStyle = grd; g.beginPath(); g.arc(cx, cz, rad, 0, Math.PI * 2); g.fill();
+        // creep em blocos de 0,5 m (pixel), borda irregular em degraus e veias roxas
+        const cxu = x0 + B / 2, czu = z0 + B / 2, R = t === 'mother' ? 14 : 8, st = 0.5, px = Math.ceil(st * ppu);
+        for (let u = -R; u < R; u += st) for (let v = -R; v < R; v += st) {
+          const d = Math.hypot(u + st / 2, v + st / 2) / R + (Math.random() - 0.5) * 0.2;
+          if (d >= 1) continue;
+          const a = d < 0.55 ? 0.92 : 0.92 * (1 - (d - 0.55) / 0.45), k = Math.random();
+          g.fillStyle = k < 0.05 ? `rgba(150,60,200,${a.toFixed(2)})` : `rgba(${52 + ((k * 24) | 0)},${10 + ((k * 8) | 0)},${52 + ((k * 22) | 0)},${a.toFixed(2)})`;
+          g.fillRect(X(cxu + u), X(czu + v), px, px);
+        }
       }
     }
     const rnd = (a, b) => a + Math.random() * (b - a);
@@ -1113,7 +1086,7 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
       maxHp: 0, hp: 0, alive: true, spawnT: rand(2, 5), children: 0, shield: null, phase: Math.random() * 6,
     };
     if (mother) {
-      const sh = new THREE.Mesh(new THREE.SphereGeometry(5.5, 24, 16), new THREE.MeshBasicMaterial({ color: 0xa040ff, transparent: true, opacity: 0.18, depthWrite: false }));
+      const sh = shieldMesh(5.5); // escudo facetado (low-poly), não mais uma esfera lisa
       sh.position.set(x, 2.5, z);
       group.add(sh);
       n.shield = sh;
