@@ -21,16 +21,18 @@ import { Coop } from './coop.js';
 import { net, playerInfo } from './net.js';
 import { setMusicIntensity } from './audio.js';
 import { auth } from './auth.js';
+import { PIX } from './pixtex.js';
 
 const MAX_ZOMBIES = 160;
 const bulletGeo = new THREE.BoxGeometry(0.07, 0.07, 0.9);
 const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe08a, blending: THREE.AdditiveBlending, transparent: true });
-const acidGeo = new THREE.SphereGeometry(1, 10, 8);
-const acidMat = new THREE.MeshBasicMaterial({ color: 0x9aff3a });
-const grenadeGeo = new THREE.SphereGeometry(0.18, 10, 8);
-const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3a4a2a, roughness: 0.6 });
+// projéteis em bloco (estilo voxel): cubo de gosma ácida e granada quadrada com pixel art
+const acidGeo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+const acidMat = new THREE.MeshBasicMaterial({ map: PIX.acid() });
+const grenadeGeo = new THREE.BoxGeometry(0.26, 0.3, 0.26);
+const grenadeMat = new THREE.MeshStandardMaterial({ map: PIX.grenade(), roughness: 0.6, metalness: 0.2 });
 const dropGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-const beamGeo = new THREE.CylinderGeometry(0.12, 0.12, 3, 8, 1, true);
+const beamGeo = new THREE.BoxGeometry(0.22, 3, 0.22);
 
 export class Game {
   constructor(app, profile, mapDef, opts = {}) {
@@ -278,6 +280,7 @@ export class Game {
       const step = s.speed * dt;
       s.x += s.dx * step; s.z += s.dz * step; s.left -= step;
       s.mesh.position.set(s.x, s.y, s.z);
+      s.mesh.rotation.x += dt * 7; s.mesh.rotation.y += dt * 5; // gosma girando no ar
       let dead = s.left <= 0;
       if (!dead && w.pointBlocked(s.x, s.z, s.y)) { dead = true; this.effects.particles(s.x, s.y, s.z, 6, 0x9aff3a, 3, 0.4, 0.8); }
       if (!dead && this.coop) for (const r of this.coop.remotes.values()) {

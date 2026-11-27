@@ -9,8 +9,8 @@ import { sfx } from './audio.js';
 import { hasModel, instanceModel } from './models.js';
 import { zombieGait, newGait } from './anim.js';
 
-const ringGeo = new THREE.RingGeometry(0.75, 0.92, 28);
-const blobGeo = new THREE.CircleGeometry(1, 20);
+const ringGeo = new THREE.RingGeometry(0.75, 0.92, 8);
+const blobGeo = new THREE.CircleGeometry(1, 8);
 const blobMat = (() => {
   const c = document.createElement('canvas');
   c.width = c.height = 64;

@@ -8,6 +8,7 @@ import { SKILLS } from './data.js';
 import { sfx } from './audio.js';
 import { icon } from './icons.js';
 import { angleDiff } from './util.js';
+import { PIX } from './pixtex.js';
 
 export const skillPower = (rank) => 1 + 0.3 * (rank - 1);
 export const skillCooldown = (id, rank) => SKILLS[id].cd * (1 - 0.12 * (rank - 1));
@@ -174,9 +175,10 @@ class Wave {
   }
 }
 
-const mineGeo = new THREE.CylinderGeometry(0.3, 0.34, 0.12, 14);
-const mineMat = new THREE.MeshStandardMaterial({ color: 0x3a4a2a, roughness: 0.6, metalness: 0.4 });
-const ledGeo = new THREE.SphereGeometry(0.06, 8, 6);
+// mina em bloco: tampa com faixas de perigo e detonador quadrado no centro
+const mineGeo = new THREE.BoxGeometry(0.62, 0.12, 0.62);
+const mineMat = new THREE.MeshStandardMaterial({ map: PIX.mine(), roughness: 0.6, metalness: 0.4 });
+const ledGeo = new THREE.BoxGeometry(0.1, 0.06, 0.1);
 class Mine {
   constructor(g, x, z, dmg) {
     this.g = g; this.x = x; this.z = z; this.dmg = dmg; this.t = 0; this.life = 60;
@@ -206,14 +208,17 @@ class Mine {
   }
 }
 
-const turMat = new THREE.MeshStandardMaterial({ color: 0x3a3e42, roughness: 0.5, metalness: 0.6 });
+const turMat = new THREE.MeshStandardMaterial({ map: PIX.turret(), roughness: 0.5, metalness: 0.6 });
+const turLegGeo = new THREE.BoxGeometry(0.08, 0.9, 0.08);
+const turBarrelGeo = new THREE.BoxGeometry(0.1, 0.1, 0.7);
+const turMuzzleGeo = new THREE.BoxGeometry(0.14, 0.14, 0.08);
 const turAcc = new THREE.MeshStandardMaterial({ color: 0xd8a020, roughness: 0.5, metalness: 0.3, emissive: 0x402800 });
 class Turret {
   constructor(g, x, z, dmg, life) {
     this.g = g; this.x = x; this.z = z; this.dmg = dmg; this.life = life; this.cd = 0; this.ang = 0;
     const m = (this.mesh = new THREE.Group());
     for (let i = 0; i < 3; i++) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6), turMat);
+      const leg = new THREE.Mesh(turLegGeo, turMat);
       const a = (i / 3) * Math.PI * 2;
       leg.position.set(Math.cos(a) * 0.28, 0.4, Math.sin(a) * 0.28);
       leg.rotation.z = Math.cos(a) * 0.35; leg.rotation.x = -Math.sin(a) * 0.35;
@@ -222,11 +227,13 @@ class Turret {
     this.head = new THREE.Group();
     this.head.position.y = 0.95;
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.5), turMat);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 8), turMat);
-    barrel.rotation.x = Math.PI / 2; barrel.position.z = 0.5;
+    const barrel = new THREE.Mesh(turBarrelGeo, turMat);
+    barrel.position.z = 0.5;
+    const muzzle = new THREE.Mesh(turMuzzleGeo, turAcc);
+    muzzle.position.z = 0.86;
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.3), turAcc);
     stripe.position.y = 0.16;
-    this.head.add(body, barrel, stripe);
+    this.head.add(body, barrel, muzzle, stripe);
     m.add(this.head);
     m.position.set(x, 0, z);
     m.traverse((o) => { if (o.isMesh) o.castShadow = true; });

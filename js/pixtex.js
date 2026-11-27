@@ -140,6 +140,37 @@ export const PIX = {
     for (let i = 0; i < 10; i++) { let x = (P.r() * 32) | 0, y = (P.r() * 32) | 0; for (let k = 0; k < 14; k++) { P.p(x, y, [190, 70, 255]); x += P.r() < 0.5 ? 1 : 0; y += P.r() < 0.6 ? 1 : -1; } }
     P.speck([200, 120, 140], 16); P.speck([40, 8, 20], 20);
   }),
+  // gosma ácida do cuspidor: verde tóxico com bolhas claras e núcleo escuro
+  acid: () => make('acid', 8, 8, (P) => {
+    P.rect(0, 0, 8, 8, [110, 220, 50], 0.12);
+    P.rect(2, 2, 4, 4, [70, 170, 30]); P.rect(3, 3, 2, 2, [40, 110, 20]);
+    for (const [x, y] of [[1, 1], [6, 2], [2, 6], [5, 5]]) P.p(x, y, [220, 255, 160]);
+  }),
+  // granada de mão: corpo verde-oliva quadriculado (gomos), faixa amarela, espoleta/pino
+  grenade: () => make('grenade', 8, 8, (P) => {
+    const O = rgb(0x4a5a2a);
+    P.rect(0, 0, 8, 8, O, 0.08);
+    for (let i = 0; i < 8; i += 3) { P.rect(i, 0, 1, 8, sh(O, 0.55)); P.rect(0, i, 8, 1, sh(O, 0.55)); }
+    P.rect(0, 1, 8, 1, [200, 170, 40]);
+    P.rect(3, 0, 2, 1, [150, 150, 150]); P.p(5, 0, [210, 210, 210]);
+  }),
+  // mina terrestre: tampa metálica com faixas de perigo nas bordas e rebites
+  mine: () => make('mine', 16, 16, (P) => {
+    const M = rgb(0x3a4a2a);
+    P.rect(0, 0, 16, 16, M, 0.1);
+    for (let i = 0; i < 16; i++) { const c = ((i >> 1) & 1) ? [220, 180, 30] : [30, 30, 30]; P.p(i, 0, c); P.p(i, 15, c); P.p(0, i, c); P.p(15, i, c); }
+    P.rect(5, 5, 6, 6, sh(M, 0.7)); P.rect(6, 6, 4, 4, [70, 70, 74]); P.rect(7, 7, 2, 2, [120, 120, 126]);
+    for (const [x, y] of [[3, 3], [12, 3], [3, 12], [12, 12]]) P.p(x, y, [150, 150, 150]);
+    P.speck([90, 60, 30], 6, 1, 1, 14, 14);
+  }),
+  // chapa da torreta: cinza-metal com painéis, rebites e desgaste
+  turret: () => make('turret', 16, 16, (P) => {
+    const G = rgb(0x4a4e54);
+    P.rect(0, 0, 16, 16, G, 0.08);
+    P.rect(0, 7, 16, 1, sh(G, 0.6)); P.rect(7, 0, 1, 16, sh(G, 0.6));
+    for (const [x, y] of [[1, 1], [14, 1], [1, 14], [14, 14], [5, 5], [10, 10]]) P.p(x, y, [150, 155, 160]);
+    P.speck(sh(G, 1.35), 10); P.speck([90, 60, 40], 5);
+  }),
   sandbag: () => make('sandbag', 16, 8, (P) => { const S = rgb(0x8a7a5a); P.rect(0, 0, 16, 8, S, 0.1); P.rect(0, 0, 16, 1, sh(S, 0.6)); P.rect(7, 0, 1, 8, sh(S, 0.65)); P.rect(15, 0, 1, 8, sh(S, 0.65)); P.speck(sh(S, 1.25), 10); }),
 };
 

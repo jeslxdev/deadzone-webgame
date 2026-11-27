@@ -7,8 +7,12 @@ import * as THREE from 'three';
 const pGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
 const tracerGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
 const sphereGeo = new THREE.SphereGeometry(1, 16, 12);
+const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+// clarão de disparo em blocos: núcleo + 3 barras cruzadas (uma "estrela" quadrada)
+const flashGeo = [new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.BoxGeometry(2.6, 0.32, 0.32), new THREE.BoxGeometry(0.32, 2.2, 0.32), new THREE.BoxGeometry(0.32, 0.32, 2.6)];
 const circleGeo = new THREE.CircleGeometry(1, 40);
 const ringGeo = new THREE.RingGeometry(0.92, 1, 48);
+const ringBlockGeo = new THREE.RingGeometry(0.86, 1, 8); // onda de choque low-poly (octógono)
 const planeGeo = new THREE.PlaneGeometry(1, 1);
 
 const matCache = new Map();
@@ -22,52 +26,63 @@ function basic(color, additive = false, opacity = 1) {
   return m;
 }
 
-// Texturas de poça/respingo de sangue (variações)
+// Texturas de poça/respingo de sangue em PIXEL ART (estilo blocos):
+// 32×32 px com filtro "nearest" — bordas em degraus, gotas quadradas, escorridos retos.
+function pixelCanvas(n) { const c = document.createElement('canvas'); c.width = c.height = n; return c; }
+function pixTex(c) {
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
+  return t;
+}
 let splatMats = null;
 function splats() {
   if (splatMats) return splatMats;
   splatMats = [];
-  for (let v = 0; v < 4; v++) {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const g = c.getContext('2d');
-    const col = (a) => `rgba(${70 + Math.random() * 30 | 0},${4 + Math.random() * 8 | 0},${6 + Math.random() * 6 | 0},${a})`;
-    g.fillStyle = col(0.85);
-    g.beginPath(); g.ellipse(64, 64, 26 + Math.random() * 12, 20 + Math.random() * 12, Math.random() * 3, 0, Math.PI * 2); g.fill();
-    for (let i = 0; i < 14; i++) {
-      const a = Math.random() * Math.PI * 2, d = 20 + Math.random() * 38, r = 2 + Math.random() * 9;
-      g.fillStyle = col(0.6 + Math.random() * 0.35);
-      g.beginPath(); g.arc(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, r, 0, Math.PI * 2); g.fill();
+  for (let v = 0; v < 5; v++) {
+    const N = 32, c = pixelCanvas(N), g = c.getContext('2d');
+    const col = (k, a = 1) => `rgba(${(70 + Math.random() * 30) * k | 0},${(6 + Math.random() * 8) * k | 0},${(8 + Math.random() * 6) * k | 0},${a})`;
+    const rx = 5 + Math.random() * 3, ry = 4 + Math.random() * 3;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { // poça central irregular, pixel a pixel
+      const dx = (x - 16) / rx, dy = (y - 16) / ry, d = dx * dx + dy * dy + (Math.random() - 0.5) * 0.5;
+      if (d < 1) { g.fillStyle = col(d < 0.35 ? 0.75 : 1, 0.92); g.fillRect(x, y, 1, 1); }
     }
-    for (let i = 0; i < 6; i++) { // escorrido
-      const a = Math.random() * Math.PI * 2;
-      g.strokeStyle = col(0.7); g.lineWidth = 3 + Math.random() * 4; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(64 + Math.cos(a) * 18, 64 + Math.sin(a) * 18); g.lineTo(64 + Math.cos(a) * (40 + Math.random() * 20), 64 + Math.sin(a) * (40 + Math.random() * 20)); g.stroke();
+    for (let i = 0; i < 12; i++) { // gotas quadradas ao redor
+      const a = Math.random() * Math.PI * 2, d = 7 + Math.random() * 8, sz = Math.random() < 0.3 ? 2 : 1;
+      g.fillStyle = col(1, 0.85); g.fillRect(Math.round(16 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d), sz, sz);
     }
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    splatMats.push(new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    for (let i = 0; i < 3; i++) { // escorridos retos
+      const a = Math.floor(Math.random() * 4) * Math.PI / 2, len = 4 + Math.random() * 6;
+      g.fillStyle = col(0.85, 0.85);
+      for (let k = 0; k < len; k++) g.fillRect(Math.round(16 + Math.cos(a) * (rx + k)), Math.round(16 + Math.sin(a) * (ry + k)), 1, 1);
+    }
+    g.fillStyle = 'rgba(160,40,40,0.5)'; g.fillRect(14, 14, 2, 1); // brilho úmido
+    splatMats.push(new THREE.MeshBasicMaterial({ map: pixTex(c), transparent: true, alphaTest: 0.05, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   }
   return splatMats;
 }
 const decalGeo = new THREE.PlaneGeometry(1, 1);
 
-// Rachadura no chão (impactos pesados)
+// Rachadura no chão (impactos pesados), em pixel art: linhas em degraus a partir do centro
 let crackMat = null;
 function crackMaterial() {
   if (crackMat) return crackMat;
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const gr = g.createRadialGradient(128, 128, 4, 128, 128, 90);
-  gr.addColorStop(0, 'rgba(15,12,10,0.75)'); gr.addColorStop(1, 'rgba(15,12,10,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = 'rgba(10,8,6,0.95)'; g.lineCap = 'round';
-  for (let i = 0; i < 9; i++) {
-    let a = (i / 9) * Math.PI * 2 + Math.random() * 0.4, x = 128, y = 128, w = 5;
-    g.beginPath(); g.moveTo(x, y);
-    for (let k = 0; k < 7; k++) { a += (Math.random() - 0.5) * 0.7; x += Math.cos(a) * (12 + Math.random() * 10); y += Math.sin(a) * (12 + Math.random() * 10); g.lineWidth = w; g.lineTo(x, y); w = Math.max(1, w * 0.78); }
-    g.stroke();
+  const N = 48, c = pixelCanvas(N), g = c.getContext('2d');
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { // mancha escura de impacto
+    const d = Math.hypot(x - 24, y - 24) / 13 + (Math.random() - 0.5) * 0.35;
+    if (d < 1) { g.fillStyle = `rgba(18,14,12,${(0.75 * (1 - d)).toFixed(2)})`; g.fillRect(x, y, 1, 1); }
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  crackMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
+  g.fillStyle = 'rgba(10,8,6,0.95)';
+  for (let i = 0; i < 8; i++) {
+    let a = (i / 8) * Math.PI * 2 + Math.random() * 0.5, x = 24, y = 24, w = 2;
+    for (let k = 0; k < 20; k++) {
+      if (k % 4 === 0) a += (Math.random() - 0.5) * 0.9;
+      x += Math.cos(a); y += Math.sin(a);
+      g.fillRect(Math.round(x), Math.round(y), w, w);
+      if (k === 8) w = 1;
+    }
+  }
+  for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(120,110,100,0.6)'; g.fillRect(16 + Math.random() * 16 | 0, 16 + Math.random() * 16 | 0, 1, 1); } // lascas
+  crackMat = new THREE.MeshBasicMaterial({ map: pixTex(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
   return crackMat;
 }
 
@@ -209,11 +224,16 @@ export class Effects {
     this.flash.color.setHex(0xffb060);
     this.flash.intensity = 8 * Math.min(2, size);
     this.flashT = 0.05;
-    const mesh = new THREE.Mesh(sphereGeo, basic(0xffd08a, true, 0.9));
-    mesh.position.set(x, y, z);
-    mesh.scale.setScalar(0.18 * size);
-    this.scene.add(mesh);
-    this.fx.push({ mesh, t: 0, life: 0.05, kind: 'fade', base: 0.9 });
+    // clarão em blocos (girado ao acaso para variar a forma a cada tiro)
+    const m = basic(0xffd08a, true, 0.95);
+    for (const pg of flashGeo) {
+      const mesh = new THREE.Mesh(pg, m);
+      mesh.position.set(x, y, z);
+      mesh.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.6);
+      mesh.scale.setScalar(0.12 * size);
+      this.scene.add(mesh);
+      this.fx.push({ mesh, t: 0, life: 0.05, kind: 'fade', base: 0.95 });
+    }
   }
 
   // Cápsula de munição ejetada para a direita da arma, quica no chão
@@ -263,14 +283,21 @@ export class Effects {
   }
 
   explosion(x, z, radius, color = 0xff7a2a) {
-    const mesh = new THREE.Mesh(sphereGeo, basic(color, true, 0.8));
-    mesh.position.set(x, 0.6, z);
-    mesh.scale.setScalar(0.3);
-    this.scene.add(mesh);
-    this.fx.push({ mesh, t: 0, life: 0.35, kind: 'boom', radius, base: 0.8 });
+    // bola de fogo em blocos: dois cubos girados (núcleo claro + casca colorida)
+    for (const [c, k, rot] of [[color, 1, 0], [0xffe0a0, 0.6, 0.78]]) {
+      const mesh = new THREE.Mesh(cubeGeo, basic(c, true, 0.85));
+      mesh.position.set(x, 0.7, z);
+      mesh.rotation.set(rot, rot * 0.7 + Math.random(), rot * 0.4);
+      mesh.scale.setScalar(0.3 * k);
+      this.scene.add(mesh);
+      this.fx.push({ mesh, t: 0, life: 0.2, kind: 'boom', radius: radius * 0.4 * k, base: 0.85 }); // clarão rápido
+    }
+    this.particles(x, 0.7, z, 18, 0xffa040, radius * 2.2, 0.45, 2.4, 2); // labaredas em blocos
+    this.particles(x, 0.7, z, 8, 0xffe0a0, radius * 1.6, 0.3, 1.6, 1);
     this.shock(x, z, radius, color);
-    this.particles(x, 0.6, z, 22, 0x3a3a3a, 7, 0.9, 2.2, 6);
-    this.particles(x, 0.6, z, 14, color, 9, 0.4, 1.2, 4);
+    this.particles(x, 0.6, z, 16, 0x3a3a3a, 7, 0.9, 2.2, 6); // entulho
+    this.particles(x, 0.6, z, 14, color, 9, 0.4, 1.4, 4); // fagulhas
+    this.particles(x, 0.9, z, 10, 0x4a4642, 1.6, 1.6, 3.6, -1.2); // fumaça em cubos subindo devagar
     this.flash.position.set(x, 2.5, z);
     this.flash.color.setHex(color);
     this.flash.intensity = 40;
@@ -278,8 +305,8 @@ export class Effects {
   }
 
   shock(x, z, radius, color = 0xffffff) {
-    const mesh = new THREE.Mesh(ringGeo, basic(color, true, 0.9));
-    mesh.rotation.x = -Math.PI / 2;
+    const mesh = new THREE.Mesh(ringBlockGeo, basic(color, true, 0.9));
+    mesh.rotation.x = -Math.PI / 2; mesh.rotation.z = Math.PI / 8;
     mesh.position.set(x, 0.12, z);
     mesh.scale.setScalar(0.2);
     this.scene.add(mesh);
