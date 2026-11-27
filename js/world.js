@@ -12,6 +12,7 @@ import { addOcclusion } from './occlusion.js';
 import { lowPower } from './device.js';
 import { makeFlames, makeFirePit, asphaltBump } from './camp.js';
 import { PIX, facadePix } from './pixtex.js';
+import { buildSafeBase } from './base.js';
 
 const P = 34, ROAD = 8, BLOCK = P - ROAD;
 const CELL = 1;
@@ -587,20 +588,9 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
   const sb = blockOrigin(0, 0);
   const safe = { x: sb.x0 + B / 2, z: sb.z0 + B / 2, r: 11 };
   {
-    const { x: cx, z: cz } = safe, hs = 10.5;
-    const wc = 0x6a6660;
-    wallRun(cx - hs, cz - hs, cx + hs, cz - hs, 1.8, 0.6, wc, [], false);
-    wallRun(cx - hs, cz - hs, cx - hs, cz + hs, 1.8, 0.6, wc, [], false);
-    wallRun(cx - hs, cz + hs, cx + hs, cz + hs, 1.8, 0.6, wc, [[8, 13]], false);
-    wallRun(cx + hs, cz - hs, cx + hs, cz + hs, 1.8, 0.6, wc, [[8, 13]], false);
-    // fogueira
-    // fogueira: montada junto com as chamas (sem colisão, como antes — o jogador nasce aqui)
-    tent(cx - 5.5, cz - 5, 4, 3.4, 0x5a6a3a);
-    tent(cx + 5.5, cz - 5, 4, 3.4, 0x6a5a3a);
-    sandbags(cx - 7, cz + 6.5, cx - 2.5, cz + 6.5);
-    // caminhão de extração
-    addPlain(3, 2.2, 6.5, cx - 6.5, 1.4, cz + 3, 0x3e4a2e, { collide: true });
-    addPlain(2.8, 1.4, 2, cx - 6.5, 1.2, cz + 7.2, 0x2e3a22, { collide: true });
+    // base em blocos com pixel art (muro, torres, portões, barracas, caminhão, suprimentos) — ver base.js
+    // a fogueira é montada junto com as chamas (sem colisão — o jogador nasce aqui)
+    buildSafeBase({ group, addCollider, cx: safe.x, cz: safe.z, hs: 10.5, rand: r });
   }
   const extraction = { x: safe.x - 4.3, z: safe.z + 3, label: 'Extrair (voltar ao acampamento)', time: 2 };
   fireSpots.push({ x: safe.x, z: safe.z, y: 0.6, camp: true });

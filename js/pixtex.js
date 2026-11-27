@@ -171,6 +171,89 @@ export const PIX = {
     for (const [x, y] of [[1, 1], [14, 1], [1, 14], [14, 14], [5, 5], [10, 10]]) P.p(x, y, [150, 155, 160]);
     P.speck(sh(G, 1.35), 10); P.speck([90, 60, 40], 5);
   }),
+  // ---------- acampamento (base da zona segura) ----------
+  // barreira de concreto tipo "new jersey": 2 m × 1 m, faixa zebrada, junta, base suja e lascas
+  barrier: () => make('barrier', 32, 16, (P) => {
+    const C = rgb(0x8c8a84);
+    P.rect(0, 0, 32, 16, C, 0.07);
+    P.rect(0, 0, 32, 1, sh(C, 1.18)); P.rect(0, 1, 32, 1, sh(C, 1.08)); // aresta superior pega luz
+    for (let x = 0; x < 32; x++) for (let y = 5; y < 8; y++) P.p(x, y, ((x + y) >> 2) & 1 ? [214, 170, 36] : [34, 32, 30]); // zebrado
+    P.rect(0, 13, 32, 3, sh(C, 0.62), 0.1); P.speck([92, 74, 52], 14, 0, 11, 32, 5); // barro na base
+    P.rect(0, 0, 1, 16, sh(C, 0.55)); P.rect(31, 0, 1, 16, sh(C, 0.7)); // junta entre módulos
+    for (let i = 0; i < 3; i++) { let x = 3 + ((P.r() * 26) | 0), y = 9; for (let k = 0; k < 4; k++) { P.p(x, y, sh(C, 0.6)); x += P.r() < 0.5 ? 1 : -1; y += 1; } } // trincas
+    P.speck(sh(C, 1.22), 14, 0, 0, 32, 12); P.speck(sh(C, 0.8), 18, 0, 0, 32, 12);
+  }),
+  // tábuas de madeira gasta (piso, torres, bancadas): 4 tábuas, veios, pregos
+  planks: () => make('planks', 16, 16, (P) => {
+    const W = rgb(0x7a5a36);
+    for (let b = 0; b < 4; b++) {
+      const k = 0.82 + P.r() * 0.3;
+      P.rect(b * 4, 0, 4, 16, sh(W, k), 0.06); P.rect(b * 4, 0, 1, 16, sh(W, 0.55));
+      for (let i = 0; i < 3; i++) P.rect(b * 4 + 1 + ((P.r() * 3) | 0), (P.r() * 14) | 0, 1, 2 + ((P.r() * 3) | 0), sh(W, 0.7));
+      P.p(b * 4 + 2, 1, [70, 70, 74]); P.p(b * 4 + 2, 14, [70, 70, 74]);
+    }
+  }),
+  // lona encerada (barracas, cobertura do caminhão): trama, costuras, remendo, barra enlameada
+  tarp: (hex) => make('tarp' + hex, 32, 32, (P) => {
+    const T = rgb(hex);
+    // trama discreta (o volume vem dos degraus), costura única, remendo sutil, sujeira leve
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) P.p(x, y, sh(T, (((x + y) & 1) ? 1.02 : 0.98) * (1 + (P.r() - 0.5) * 0.05)));
+    for (let y = 0; y < 32; y++) { P.p(0, y, sh(T, 0.8)); if (y % 4 === 0) P.p(1, y, sh(T, 1.1)); }
+    P.rect(19, 9, 7, 6, sh(T, 0.9)); P.rect(19, 9, 7, 1, sh(T, 0.8)); P.rect(19, 14, 7, 1, sh(T, 0.8));
+    P.speck(sh(T, 0.82), 16); P.speck(sh(T, 1.12), 10); P.speck([110, 92, 66], 8, 0, 26, 32, 6);
+  }),
+  // chapa verde-oliva do caminhão: painéis, rebites, estrela estêncil e ferrugem
+  truck: () => make('truck', 32, 32, (P) => {
+    const O = rgb(0x4a5530);
+    P.rect(0, 0, 32, 32, O, 0.06);
+    P.rect(0, 15, 32, 1, sh(O, 0.6)); P.rect(15, 0, 1, 32, sh(O, 0.6));
+    for (let x = 1; x < 32; x += 4) { P.p(x, 1, sh(O, 1.4)); P.p(x, 30, sh(O, 1.4)); }
+    const star = ['...#...', '...#...', '#######', '.#####.', '..###..', '.##.##.', '##...##'];
+    star.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') P.p(20 + x, 20 + y, [214, 210, 196]); }));
+    P.speck([120, 70, 36], 14); P.speck(sh(O, 0.7), 20); P.speck([80, 66, 48], 10, 0, 26, 32, 6);
+  }),
+  // frente do caminhão: grade vertical, faróis quadrados, para-choque com zebrado
+  truckFront: () => make('truckFront', 16, 16, (P) => {
+    const O = rgb(0x4a5530);
+    P.rect(0, 0, 16, 16, O, 0.06);
+    P.rect(4, 3, 8, 8, [26, 28, 22]); for (let x = 5; x < 12; x += 2) P.rect(x, 3, 1, 8, [70, 76, 58]);
+    P.rect(1, 5, 2, 2, [255, 236, 170]); P.rect(13, 5, 2, 2, [255, 236, 170]);
+    for (let x = 0; x < 16; x++) for (let y = 13; y < 16; y++) P.p(x, y, ((x + y) >> 1) & 1 ? [214, 170, 36] : [30, 30, 28]);
+  }),
+  // telha de zinco corrugada (telhado das torres): ondas claras/escuras, ferrugem nas bordas
+  metalRoof: () => make('metalRoof', 16, 16, (P) => {
+    for (let x = 0; x < 16; x++) P.rect(x, 0, 1, 16, x % 4 < 2 ? [134, 136, 134] : [92, 94, 94], 0.06);
+    P.speck([128, 72, 38], 16, 0, 0, 16, 4); P.speck([128, 72, 38], 10, 0, 12, 16, 4);
+    for (let x = 1; x < 16; x += 5) P.p(x, 2, [170, 170, 168]);
+  }),
+  // gerador: chapa amarela com venezianas, painel e adesivo de alerta
+  generator: () => make('generator', 16, 16, (P) => {
+    const Y = rgb(0xc8a020);
+    P.rect(0, 0, 16, 16, Y, 0.06); P.rect(0, 0, 16, 1, sh(Y, 0.6)); P.rect(0, 15, 16, 1, sh(Y, 0.5));
+    for (let y = 3; y < 12; y += 2) P.rect(2, y, 7, 1, [40, 36, 24]);
+    P.rect(11, 3, 3, 4, [34, 34, 34]); P.p(12, 4, [255, 60, 40]); P.p(12, 5, [80, 255, 90]);
+    P.rect(11, 9, 3, 3, [240, 240, 230]); P.p(12, 10, [20, 20, 20]);
+    P.speck([90, 70, 30], 10);
+  }),
+  // rádio de campanha: caixa verde com mostradores, alto-falante e LED
+  radio: () => make('radio', 16, 8, (P) => {
+    P.rect(0, 0, 16, 8, [52, 62, 44], 0.08);
+    for (let y = 2; y < 7; y += 2) for (let x = 1; x < 6; x += 2) P.p(x, y, [24, 26, 22]);
+    P.rect(7, 2, 4, 3, [150, 190, 120]); P.p(8, 3, [40, 60, 30]);
+    P.rect(12, 2, 2, 2, [180, 180, 170]); P.rect(12, 5, 2, 2, [180, 180, 170]); P.p(15, 1, [255, 50, 40]);
+  }),
+  // bandeira dos sobreviventes: preta com caveira em pixel e barra rasgada
+  flag: () => make('flag', 16, 12, (P) => {
+    P.rect(0, 0, 16, 12, [24, 22, 22], 0.1);
+    const sk = ['..####..', '.######.', '##.##.##', '########', '.##..##.', '..####..', '..#..#..'];
+    sk.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') P.p(4 + x, 2 + y, [226, 220, 200]); }));
+    P.rect(0, 10, 16, 1, [180, 40, 30]); for (const x of [3, 9, 14]) P.p(x, 11, [0, 0, 0]);
+  }),
+  // caixa d'água (IBC): plástico claro com gaiola metálica e nível de água
+  tote: () => make('tote', 16, 16, (P) => {
+    P.rect(0, 0, 16, 16, [206, 208, 200], 0.05); P.rect(0, 7, 16, 9, [150, 176, 186], 0.05);
+    for (let i = 0; i < 16; i += 4) { P.rect(i, 0, 1, 16, [96, 98, 100]); P.rect(0, i, 16, 1, [96, 98, 100]); }
+  }),
   sandbag: () => make('sandbag', 16, 8, (P) => { const S = rgb(0x8a7a5a); P.rect(0, 0, 16, 8, S, 0.1); P.rect(0, 0, 16, 1, sh(S, 0.6)); P.rect(7, 0, 1, 8, sh(S, 0.65)); P.rect(15, 0, 1, 8, sh(S, 0.65)); P.speck(sh(S, 1.25), 10); }),
 };
 
