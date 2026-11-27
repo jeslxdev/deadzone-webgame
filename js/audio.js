@@ -1,5 +1,5 @@
 // ============================================================
-//  ÁUDIO — síntese procedural mais natural (WebAudio, sem arquivos)
+//  ÁUDIO — gravações e síntese procedural com mixagem WebAudio
 //  · tiros em camadas: estalo + corpo + grave + eco/reverb externo
 //  · lâminas com "whoosh" e brilho metálico, impactos carnudos
 //  · grunhidos de zumbi com formantes e vibrato
@@ -50,7 +50,7 @@ async function loadSamples() {
   } catch {}
 }
 const lastSample = {};
-function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, delay = 0, cutoff = 0 } = {}) {
+function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, delay = 0, cutoff = 0, maxDuration = Infinity } = {}) {
   const list = samples[ev];
   if (!list || !list.length) return false;
   const src = ctx.createBufferSource();
@@ -60,13 +60,23 @@ function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, de
   if (skip && index >= previous) index++;
   lastSample[ev] = index;
   src.buffer = list[index];
-  src.playbackRate.value = rate * (0.95 + Math.random() * 0.1);
+  src.playbackRate.value = rate * (0.985 + Math.random() * 0.03);
+  const start = ctx.currentTime + delay;
+  const duration = Math.min(src.buffer.duration / src.playbackRate.value, maxDuration);
+  const fade = Math.min(0.022, duration * 0.18);
+  const envelope = ctx.createGain();
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(1, start + Math.min(0.0015, duration * 0.08));
+  envelope.gain.setValueAtTime(1, start + duration - fade);
+  envelope.gain.linearRampToValueAtTime(0, start + duration);
+  src.connect(envelope);
   const output = out({ gain, pan, rev, bus });
   if (cutoff) {
     const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = cutoff;
-    src.connect(filter); filter.connect(output);
-  } else src.connect(output);
-  src.start(ctx.currentTime + delay);
+    envelope.connect(filter); filter.connect(output);
+  } else envelope.connect(output);
+  src.start(start);
+  src.stop(start + duration);
   return true;
 }
 const last = {};
@@ -79,11 +89,16 @@ export function initAudio() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
   } catch { ctx = null; return; }
   const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.25;
+  comp.threshold.value = -10; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.12;
   master = ctx.createGain();
   master.gain.value = muted ? 0 : VOL * vol.master;
   master.connect(comp); comp.connect(ctx.destination);
-  sfxBus = ctx.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(master);
+  sfxBus = ctx.createGain(); sfxBus.gain.value = vol.sfx;
+  // Retira subgraves e suaviza aspereza sem interferir nos controles de cada canal.
+  const rumble = ctx.createBiquadFilter(); rumble.type = 'highpass'; rumble.frequency.value = 38; rumble.Q.value = 0.7;
+  const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 680; body.Q.value = 0.8; body.gain.value = -1.6;
+  const presence = ctx.createBiquadFilter(); presence.type = 'highshelf'; presence.frequency.value = 3400; presence.gain.value = -3.2;
+  sfxBus.connect(rumble); rumble.connect(body); body.connect(presence); presence.connect(master);
   ambBus = ctx.createGain(); ambBus.gain.value = vol.amb; ambBus.connect(master);
   musicBus = ctx.createGain(); musicBus.gain.value = vol.music * 0.5; musicBus.connect(master);
 
@@ -438,7 +453,7 @@ export const sfx = {
     const gun = GUNS[kind] || GUNS.pistola;
     // A rajada concentra energia sem acumular uma nova cauda reverberante a cada bala.
     const burstGain = rapid ? 0.53 : kind === 'smg' ? 0.78 : 1;
-    if (!playSample('shot_' + kind, { gain: gun.gain * gain * burstGain, pan, rev: rapid ? 0 : gun.rev * 0.10, rate: rapid ? 0.94 : 1, cutoff: rapid ? 3500 : 0 })) gunshot(kind, pan, gain * burstGain);
+    if (!playSample('shot_' + kind, { gain: gun.gain * gain * burstGain, pan, rev: rapid ? 0 : gun.rev * 0.07, rate: rapid ? 0.97 : 1, cutoff: rapid ? 3500 : 0, maxDuration: kind === 'smg' ? (rapid ? 0.105 : 0.14) : Infinity })) gunshot(kind, pan, gain * burstGain);
     const t = ctx.currentTime;
     if (gun.pump) { mech(t + 0.42, pan, 0.5 * gain); mech(t + 0.56, pan, 0.6 * gain, 1800); }
     if (gun.bolt) { mech(t + 0.5, pan, 0.4 * gain, 2600); mech(t + 0.7, pan, 0.5 * gain, 1600); }
