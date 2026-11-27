@@ -636,11 +636,11 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith('/api/')) return api(req, res, url);
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC_HEADERS); return res.end(); }
   if (p === '/') p = '/index.html';
-  if (!PUBLIC_RE.test(p) || p.includes('..') || p.includes('/.')) { res.writeHead(404, SEC_HEADERS); return res.end('404'); }
+  if (!PUBLIC_RE.test(p) || p.includes('..') || p.includes('/.')) { res.writeHead(404, { ...SEC_HEADERS, 'Cache-Control': 'no-store' }); return res.end('404'); }
   const file = path.join(root, path.normalize(p));
   if (!file.startsWith(root + path.sep)) { res.writeHead(403, SEC_HEADERS); return res.end(); }
   fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404, SEC_HEADERS); return res.end('404'); }
+    if (err) { res.writeHead(404, { ...SEC_HEADERS, 'Cache-Control': 'no-store' }); return res.end('404'); }
     const ext = path.extname(file).toLowerCase();
     const headers = { ...SEC_HEADERS, 'Content-Type': types[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' };
     if (ext === '.html') { sessionOf(req, res); headers['Content-Security-Policy'] = csp(req); } // garante cookie de sessão

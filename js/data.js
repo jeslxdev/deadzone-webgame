@@ -161,14 +161,15 @@ export const SKIN_COLORS = [0xffdbac, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x
 export const HAIR_COLORS = [0x151515, 0x4a2c17, 0x8b5a2b, 0xd4a76a, 0xb03a2e, 0xe8e8e8, 0x3b7dd8, 0x6aa84f, 0xd94fa0];
 export const CLOTH_COLORS = [0x262626, 0x5a5a5a, 0x8b2e2e, 0x2e4a8b, 0x3e6b3a, 0x6b5a3a, 0xc9b48a, 0x4a2e6b, 0xd96b1c, 0xe0e0e0, 0x1f5f5f, 0x7a1f3d];
 export const EYE_COLORS = [0x2b1a0e, 0x3b6ea5, 0x4e8a3a, 0x6b6b6b, 0x8a5a2b];
-export const HAIR_STYLES = { careca: 'Careca', curto: 'Curto', moicano: 'Moicano', longo: 'Longo', coque: 'Coque Samurai', afro: 'Black Power' };
+export const HAIR_STYLES = { careca: 'Careca', curto: 'Curto', moicano: 'Moicano', longo: 'Longo', coque: 'Coque Samurai', afro: 'Black Power', rabo: 'Rabo de cavalo', chanel: 'Chanel' };
+export const BODY_TYPES = { m: 'Masculino', f: 'Feminino' };
 export const BEARDS = { nenhuma: 'Nenhuma', barba: 'Barba cheia', cavanhaque: 'Cavanhaque', bigode: 'Bigode' };
 export const ACCESSORIES = { nenhum: 'Nenhum', bandana: 'Bandana', mascara: 'Máscara de Gás', chapeu: 'Chapéu', oculos: 'Óculos Táticos', capacete: 'Capacete', kasa: 'Kasa (palha)' };
 export const BUILDS = { magro: 'Magro', normal: 'Normal', forte: 'Forte' };
 
 export function defaultAppearance() {
   return {
-    skin: SKIN_COLORS[1], hair: HAIR_COLORS[0], hairStyle: 'curto', beard: 'nenhuma',
+    body: 'm', skin: SKIN_COLORS[1], hair: HAIR_COLORS[0], hairStyle: 'curto', beard: 'nenhuma',
     eyes: EYE_COLORS[0], top: CLOTH_COLORS[2], pants: CLOTH_COLORS[0], shoes: CLOTH_COLORS[5],
     pack: CLOTH_COLORS[4], accessory: 'nenhum', build: 'normal', height: 1.0,
   };

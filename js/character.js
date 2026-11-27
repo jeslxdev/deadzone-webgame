@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WEAPONS, RARITIES } from './data.js';
 import { mulberry32, pick } from './util.js';
+import { buildBlockyGeometries, paintPlayerSkin, paintZombieSkin, canvasTexture, atlasBox, XR } from './blocky.js';
 
 // ---------- utilidades compartilhadas (também usadas por world.js) ----------
 const geoCache = new Map();
@@ -818,7 +819,87 @@ function glowMat(color) {
   return m;
 }
 
+// ============================================================
+//  MODELO EM BLOCOS (padrão): mesma articulação do rig, skin em pixel art
+// ============================================================
+const blockyGeoCache = new Map();
+function buildBlockyHumanoid(ap, opts = {}) {
+  const zombie = !!opts.zombie, shadows = opts.shadows !== false;
+  let tex, extras = [], texH = 64;
+  if (!zombie && ap.skinPng) { tex = skinTexture(ap.skinPng); texH = ap.skinH === 32 ? 32 : 64; }
+  else {
+    const sk = zombie ? paintZombieSkin(ap._type || 'andarilho', ap, ap._variant || 0) : paintPlayerSkin(ap);
+    tex = canvasTexture(sk.canvas); extras = sk.extras;
+  }
+  const gkey = JSON.stringify([ap.build, ap.body || 'm', texH, extras]);
+  let built = blockyGeoCache.get(gkey);
+  if (!built) { built = buildBlockyGeometries(ap, extras, texH); blockyGeoCache.set(gkey, built); }
+  const { geos, dims: D } = built;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, roughness: 0.86, metalness: 0 });
+  const mats = [mat];
+  const add = (parent, geo) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.castShadow = shadows; m.receiveShadow = !zombie; parent.add(m); };
+  const root = new THREE.Group(), body = new THREE.Group();
+  root.add(body);
+  const hipY = 0.88;
+  const makeLeg = (side) => {
+    const g = new THREE.Group(); g.position.set(side * D.legW / 2, hipY, 0);
+    add(g, geos[side < 0 ? 'legRU' : 'legLU']);
+    const knee = new THREE.Group(); knee.position.y = -0.42;
+    add(knee, geos[side < 0 ? 'legRD' : 'legLD']);
+    g.add(knee); body.add(g);
+    return { g, knee };
+  };
+  const LR = makeLeg(-1), LL = makeLeg(1);
+  const torso = new THREE.Group(); torso.position.y = hipY; body.add(torso);
+  add(torso, geos.torso);
+  const head = new THREE.Group(); head.position.y = D.bodyH; torso.add(head);
+  add(head, geos.head);
+  let em = null;
+  if (zombie) { // olhos brilhantes nas órbitas pintadas
+    em = glowMat(ap.eyes);
+    const u = D.head / 8, eyeGeo = blockyEyeGeo || (blockyEyeGeo = new THREE.BoxGeometry(1, 1, 1));
+    for (const col of [2, 6]) {
+      const e = new THREE.Mesh(eyeGeo, em);
+      e.scale.set(u * 0.9, u * 0.55, 0.012);
+      e.position.set((col - 4) * u + (col === 2 ? -u * 0.1 : u * 0.1), D.head - 4.25 * u, D.head / 2 + 0.008);
+      head.add(e);
+    }
+  }
+  const makeArm = (side, gu, gd) => {
+    const grp = new THREE.Group(); grp.position.set(side * (D.bodyW / 2 + D.armW / 2), D.bodyH - 0.04, 0);
+    grp.rotation.order = 'YXZ';
+    add(grp, gu);
+    const elbow = new THREE.Group(); elbow.position.y = -0.3; add(elbow, gd); grp.add(elbow);
+    const hand = new THREE.Group(); hand.position.y = -0.33; elbow.add(hand);
+    torso.add(grp);
+    return { g: grp, elbow, hand };
+  };
+  const R = makeArm(-1, geos.armRU, geos.armRD), L = makeArm(1, geos.armLU, geos.armLD);
+  const s = ap.height || 1;
+  body.scale.setScalar(s);
+  return {
+    root, body, torso, head, legL: LL.g, legR: LR.g, kneeL: LL.knee, kneeR: LR.knee,
+    armR: R.g, armL: L.g, elbowR: R.elbow, elbowL: L.elbow, handR: R.hand, handL: L.hand,
+    mats, eyeMat: em, bw: D.bw, height: 1.9 * s, blocky: true, dims: D,
+    backZ: -(D.bodyD / 2) - (zombie || ap.skinPng ? 0.04 : 0.18),
+    weapon: null, weaponL: null, muzzle: null,
+    setFlash(v) { for (const m of mats) m.emissive.setRGB(v, v * 0.15, v * 0.1); },
+    setEyeColor(color) {
+      if (!zombie) return;
+      const m = glowMat(color);
+      head.children.forEach((c) => { if (c.material === this.eyeMat) c.material = m; });
+      this.eyeMat = m;
+    },
+    setWeapon: HUMANOID_API.setWeapon,
+    holster: null,
+    setHolster: HUMANOID_API.setHolster,
+    dispose() { mats.forEach((m) => m.dispose()); }, // geometrias e texturas ficam em cache (compartilhadas)
+  };
+}
+let blockyEyeGeo = null;
+
 export function buildHumanoid(ap, opts = {}) {
+  if (!opts.round) return buildBlockyHumanoid(ap, opts);
   reliefTextures();
   const zombie = !!opts.zombie;
   const bw = BUILD_W[ap.build] || 1;
@@ -938,7 +1019,8 @@ export function buildHumanoid(ap, opts = {}) {
       head.children.forEach((c) => { if (c.material === this.eyeMat) c.material = m; });
       this.eyeMat = m;
     },
-    setWeapon(w) {
+    setWeapon: HUMANOID_API.setWeapon,
+    _unusedSetWeapon(w) {
       if (this.weapon) { this.handR.remove(this.weapon); this.weapon = null; }
       if (this.weaponL) { this.handL.remove(this.weaponL); this.weaponL = null; }
       if (!w) return;
@@ -964,7 +1046,8 @@ export function buildHumanoid(ap, opts = {}) {
     // (cabo/cano sobre o ombro direito), pistola no coldre do quadril direito.
     // Armas: eixo principal em -Y (ponta/cano), cabo/coronha na origem, topo em +Z.
     holster: null,
-    setHolster(w) {
+    setHolster: HUMANOID_API.setHolster,
+    _unusedSetHolster(w) {
       if (this.holster) { this.holster.parent && this.holster.parent.remove(this.holster); this.holster = null; }
       if (!w || !WEAPONS[w.base]) return;
       const built = buildWeapon(w.base, w.rarity);
@@ -995,6 +1078,54 @@ export function buildHumanoid(ap, opts = {}) {
     },
   };
 }
+
+// Métodos compartilhados pelos dois modelos (usam this.*)
+const HUMANOID_API = {
+  setWeapon(w) {
+    if (this.weapon) { this.handR.remove(this.weapon); this.weapon = null; }
+    if (this.weaponL) { this.handL.remove(this.weaponL); this.weaponL = null; }
+    if (!w) return;
+    const built = buildWeapon(w.base, w.rarity);
+    this.weapon = built.group; this.muzzle = built.muzzle;
+    // Origem da arma no centro da palma; a empunhadura fica entre polegar e dedos.
+    built.group.position.set(0, -0.04, WEAPONS[w.base].type === 'gun' ? 0.11 : 0.055);
+    if (WEAPONS[w.base].type !== 'gun') {
+      built.group.rotation.x = Math.PI + 1.4;
+      built.group.rotation.y = 0.55;
+    }
+    this.handR.add(built.group);
+    if (WEAPONS[w.base].dual) {
+      const b2 = buildWeapon(w.base, w.rarity);
+      b2.group.position.copy(built.group.position);
+      b2.group.rotation.x = built.group.rotation.x;
+      b2.group.rotation.y = -built.group.rotation.y;
+      this.weaponL = b2.group; this.handL.add(b2.group);
+    }
+  },
+  // Arma reserva no corpo: lâmina/arma longa nas costas, pistola no coldre do quadril direito.
+  // Armas: eixo principal em -Y (ponta/cano), cabo/coronha na origem, topo em +Z.
+  setHolster(w) {
+    if (this.holster) { this.holster.parent && this.holster.parent.remove(this.holster); this.holster = null; }
+    if (!w || !WEAPONS[w.base]) return;
+    const built = buildWeapon(w.base, w.rarity);
+    const g = new THREE.Group();
+    g.add(built.group);
+    const W = WEAPONS[w.base], backZ = this.backZ ?? -0.34, halfW = this.dims ? this.dims.bodyW / 2 : 0.2 * this.bw;
+    if (W.type === 'gun' && w.base === 'pistola') {
+      g.position.set(-(halfW + 0.05), 0.16, 0.02);
+      g.rotation.set(0.12, Math.PI / 2, 0.05);
+    } else if (W.type === 'gun') {
+      built.group.rotation.x = Math.PI;
+      g.position.set(0.12, 0.2, backZ);
+      g.rotation.set(0, Math.PI, -0.55);
+    } else {
+      g.position.set(-0.14, 0.72, backZ);
+      g.rotation.set(0, Math.PI, -0.5);
+    }
+    this.torso.add(g);
+    this.holster = g;
+  },
+};
 
 // ---------- Armas ----------
 // Espaço da mão: o braço aponta para -Y; "cima" da arma = +Z.
@@ -1141,13 +1272,16 @@ export function zombieAppearance(type, variant = Math.floor(Math.random() * ZOMB
   for (const ch of type) hsh = (hsh * 31 + ch.charCodeAt(0)) | 0;
   const r = mulberry32(hsh + variant * 977);
   const ap = {
-    _key: type + ':' + variant,
+    _key: type + ':' + variant, _type: type, _variant: variant,
     skin: pick(Z_SKIN, r), hair: pick([0x1a1a1a, 0x3a2a1a, 0x555555, 0x6a5a3a], r),
     hairStyle: pick(['careca', 'ralo', 'curto', 'longo', 'ralo'], r), beard: r() < 0.25 ? 'barba' : 'nenhuma',
     eyes: pick([0xff3a1a, 0xd8ff3a, 0xffb000], r), top: pick(Z_CLOTH, r), pants: pick(Z_CLOTH, r), shoes: 0x2a2420,
     accessory: 'nenhum', build: 'normal', height: 0.94 + r() * 0.12,
     sleeves: r() < 0.5 ? 'short' : 'long', tornArm: r() < 0.4, tornPants: r() < 0.3,
   };
+  // ~1/3 das variações são mulheres (cabelo comprido, sem barba)
+  ap.body = r() < 0.35 && type !== 'brutamontes' ? 'f' : 'm';
+  if (ap.body === 'f') { ap.beard = 'nenhuma'; if (ap.hairStyle !== 'careca') ap.hairStyle = 'longo'; }
   if (type === 'blindado') { ap.top = 0x4b5320; ap.pants = 0x3d4220; ap.accessory = 'capacete'; ap.build = 'forte'; ap.hairStyle = 'careca'; ap.sleeves = 'long'; ap.tornArm = false; }
   if (type === 'brutamontes') { ap.build = 'gordo'; ap.hairStyle = 'careca'; ap.top = pick([0x6a5a4a, 0x4a3a2a], r); ap.sleeves = 'short'; }
   if (type === 'corredor') { ap.build = 'magro'; }
@@ -1161,6 +1295,27 @@ const decoMats = {};
 function dmat(k, make) { return decoMats[k] || (decoMats[k] = make()); }
 export function decorateZombie(rig, type) {
   const extras = {};
+  if (rig.blocky) {
+    const D = rig.dims, mat = rig.mats[0];
+    if (type === 'cuspidor') {
+      const sac = new THREE.Group(); sac.position.set(0, 0.02, D.head / 2 + 0.03); // papo inchado sob o queixo
+      const m = new THREE.Mesh(atlasBox(0.22, 0.13, 0.1, XR.acc), mat); m.castShadow = true; sac.add(m);
+      rig.head.add(sac); extras.sac = sac;
+    }
+    if (type === 'explosivo') {
+      const belly = new THREE.Group(); belly.position.set(0, 0.28, D.bodyD / 2 + 0.07);
+      const m = new THREE.Mesh(atlasBox(D.bodyW * 0.82, 0.36, 0.16, XR.pack), mat); m.castShadow = true; belly.add(m);
+      rig.torso.add(belly); extras.belly = belly;
+    }
+    if (type === 'brutamontes') {
+      for (let i = 0; i < 4; i++) {
+        const sp = new THREE.Mesh(atlasBox(0.06, 0.22, 0.06, XR.hair), mat);
+        sp.position.set((i - 1.5) * 0.13, D.bodyH - 0.06 - Math.abs(i - 1.5) * 0.05, -D.bodyD / 2 - 0.05);
+        sp.rotation.x = -0.75; rig.torso.add(sp);
+      }
+    }
+    return extras;
+  }
   // Partes que pulsam (bolsa de ácido, barriga) ficam num pivô de escala 1:
   // zombies.js anima a escala do pivô (1 → 1.4), o tamanho real fica na malha interna.
   if (type === 'cuspidor') {

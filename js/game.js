@@ -770,8 +770,10 @@ export class Game {
     this.sun.position.set(p.x - 22, 45, p.z + 18);
     this.sun.target.position.set(p.x, 0, p.z);
     this.playerLight.position.set(p.x, 3.2, p.z + 0.5);
+    // só o prédio entre a câmera e o personagem fica transparente;
+    // sem a janela circular pontilhada ao redor do personagem
     this.world.updateOcclusion(c, p, dt);
-    updateOcclusionWindow(c, p, setting('seeThrough') && !pl.dead);
+    updateOcclusionWindow(c, p, false);
 
     // Mira = interseção do mouse com plano y=1
     const ndc = new THREE.Vector2((inp.mx / innerWidth) * 2 - 1, -(inp.my / innerHeight) * 2 + 1);

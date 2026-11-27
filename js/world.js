@@ -11,6 +11,7 @@ import { mat, box } from './character.js';
 import { addOcclusion } from './occlusion.js';
 import { lowPower } from './device.js';
 import { makeFlames, makeFirePit, asphaltBump } from './camp.js';
+import { PIX, facadePix } from './pixtex.js';
 
 const P = 34, ROAD = 8, BLOCK = P - ROAD;
 const CELL = 1;
@@ -20,52 +21,8 @@ const TILE_W = 16, TILE_H = 14;
 let facadeTex = null, facadeEmi = null;
 function makeFacadeTextures() {
   if (facadeTex) return;
-  const S = 512, c = document.createElement('canvas'), e = document.createElement('canvas');
-  c.width = c.height = e.width = e.height = S;
-  const g = c.getContext('2d'), ge = e.getContext('2d');
-  g.fillStyle = '#d4d0ca'; g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 4000; i++) {
-    const v = 180 + Math.random() * 60 | 0;
-    g.fillStyle = `rgba(${v},${v},${v - 8},0.25)`;
-    g.fillRect(Math.random() * S, Math.random() * S, 2, 2);
-  }
-  ge.fillStyle = '#000'; ge.fillRect(0, 0, S, S);
-  const cell = S / 4;
-  for (let fy = 0; fy < 4; fy++) {
-    g.fillStyle = 'rgba(90,85,80,0.5)';
-    g.fillRect(0, fy * cell + cell - 6, S, 6);
-    for (let fx = 0; fx < 4; fx++) {
-      const x = fx * cell + 26, y = fy * cell + 24, w = cell - 52, h = cell - 50;
-      g.fillStyle = '#4a4844'; g.fillRect(x - 4, y - 4, w + 8, h + 8);
-      const broken = Math.random() < 0.35;
-      g.fillStyle = broken ? '#0b0c0e' : '#1d2128'; g.fillRect(x, y, w, h);
-      if (!broken) {
-        g.fillStyle = 'rgba(120,140,160,0.18)'; g.fillRect(x + 4, y + 4, w * 0.4, h - 8);
-      } else {
-        g.fillStyle = '#2b3036';
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + w * 0.4, y); g.lineTo(x + w * 0.1, y + h * 0.5); g.fill();
-      }
-      g.fillStyle = '#4a4844'; g.fillRect(x + w / 2 - 2, y, 4, h);
-      if (Math.random() < 0.14) {
-        ge.fillStyle = Math.random() < 0.5 ? '#ff9a3a' : '#c8a060';
-        ge.globalAlpha = 0.5 + Math.random() * 0.5;
-        ge.fillRect(x, y, w, h);
-        ge.globalAlpha = 1;
-      }
-    }
-  }
-  // sujeira escorrida
-  for (let i = 0; i < 40; i++) {
-    g.fillStyle = `rgba(40,35,30,${0.05 + Math.random() * 0.12})`;
-    g.fillRect(Math.random() * S, Math.random() * S, 3 + Math.random() * 10, 30 + Math.random() * 120);
-  }
-  facadeTex = new THREE.CanvasTexture(c);
-  facadeTex.wrapS = facadeTex.wrapT = THREE.RepeatWrapping;
-  facadeTex.colorSpace = THREE.SRGBColorSpace;
-  facadeTex.anisotropy = 4;
-  facadeEmi = new THREE.CanvasTexture(e);
-  facadeEmi.wrapS = facadeEmi.wrapT = THREE.RepeatWrapping;
-  facadeEmi.colorSpace = THREE.SRGBColorSpace;
+  const f = facadePix(); // pixel art (tijolos, janelas, peitoris) com brilho das janelas acesas
+  facadeTex = f.map; facadeEmi = f.emi;
 }
 
 const _c = new THREE.Color();
@@ -94,6 +51,7 @@ function facadeUV(g, w, h, d, off) {
 // ---------- Contêineres saqueáveis (malhas) ----------
 const darkCache = new Map();
 function darkVersion(m) {
+  if (Array.isArray(m)) return m.map(darkVersion); // caixas com material por face (carro)
   let d = darkCache.get(m);
   if (!d) { d = m.clone(); d.color = m.color.clone().multiplyScalar(0.35); d.emissiveIntensity = 0; addOcclusion(d); darkCache.set(m, d); }
   return d;
@@ -101,16 +59,19 @@ function darkVersion(m) {
 const CM = {};
 function cmats() {
   if (CM.wood) return CM;
-  CM.wood = mat(0x8a6a3a); CM.woodDark = mat(0x5a4426);
-  CM.green = mat(0x2f5a3a); CM.greenDark = mat(0x22402a);
-  CM.metal = mat(0x6a7076, { metalness: 0.5, roughness: 0.5 });
-  CM.steel = mat(0x3a3d42, { metalness: 0.7, roughness: 0.4 });
+  // pixel art em todas as faces (estilo blocos)
+  const T = (map, opts = {}) => mat(0xffffff, { map, ...opts });
+  CM.wood = T(PIX.crate()); CM.woodDark = T(PIX.crate(), { color: 0x9a8a78 });
+  CM.green = T(PIX.dumpster()); CM.greenDark = T(PIX.dumpster(), { color: 0x8a9a8a });
+  CM.metal = T(PIX.locker(), { metalness: 0.35, roughness: 0.6 });
+  CM.steel = T(PIX.safe(), { metalness: 0.5, roughness: 0.5 });
   CM.gold = mat(0xc9a440, { metalness: 0.8, roughness: 0.3, emissive: 0x3a2a00 });
-  CM.olive = mat(0x4b5a2a); CM.white = mat(0xd8d8d0);
-  CM.glass = mat(0x1d252c, { roughness: 0.2, metalness: 0.3 });
-  CM.tire = mat(0x151515);
-  CM.light = mat(0xd8d0b0, { emissive: 0x3a3420, roughness: 0.2 });
-  CM.purple = mat(0x5a1a7a, { emissive: 0x8a2aff, emissiveIntensity: 0.6 });
+  CM.olive = T(PIX.military()); CM.white = mat(0xd8d8d0);
+  CM.glass = T(PIX.glass(), { roughness: 0.2, metalness: 0.3 });
+  CM.tire = T(PIX.tire());
+  CM.light = mat(0xd8d0b0, { emissive: 0xfff0b0, emissiveIntensity: 0.35, roughness: 0.2 });
+  CM.purple = T(PIX.treasure(), { emissive: 0x8a2aff, emissiveIntensity: 0.25 });
+  CM.bumper = mat(0x2a2a2c, { roughness: 0.6 });
   return CM;
 }
 function m3(geo, material, x, y, z) {
@@ -119,10 +80,11 @@ function m3(geo, material, x, y, z) {
   return m;
 }
 const CAR_COLORS = [0x7a2a22, 0x2a3a5a, 0x8a8a80, 0x3a4a3a, 0x6a5a3a, 0x9a7a2a, 0x4a2a3a, 0x2a2a2a];
-const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 14);
-const carBodyGeo = (() => { const g = new THREE.CapsuleGeometry(0.42, 3.4, 5, 14); g.rotateX(Math.PI / 2); g.scale(2.4, 1, 1); return g; })();
-const carCabinGeo = (() => { const g = new THREE.CapsuleGeometry(0.36, 1.5, 5, 12); g.rotateX(Math.PI / 2); g.scale(2.4, 1, 1); return g; })();
-const lightGeo = new THREE.SphereGeometry(0.13, 10, 8);
+// carro em blocos (carroceria, cabine de vidro, teto, rodas, faróis, para-choques)
+const wheelGeo = new THREE.BoxGeometry(0.3, 0.72, 0.72);
+const carBodyGeo = new THREE.BoxGeometry(2.0, 0.62, 4.2);
+const carCabinGeo = new THREE.BoxGeometry(1.8, 0.52, 2.2);
+const lightGeo = new THREE.BoxGeometry(0.34, 0.16, 0.06);
 function containerMesh(type, r) {
   const M = cmats();
   const g = new THREE.Group();
@@ -131,44 +93,42 @@ function containerMesh(type, r) {
     case 'lixeira':
       w = 2.0; d = 1.1; h = 1.2;
       g.add(m3(box(2, 1.1, 1.1), M.green, 0, 0.55, 0));
-      g.add(m3(box(2.05, 0.1, 1.15), M.greenDark, 0, 1.15, 0));
+      g.add(m3(box(2.06, 0.12, 1.16), M.greenDark, 0, 1.16, 0)); // tampa
       break;
     case 'caixa':
       g.add(m3(box(1, 1, 1), M.wood, 0, 0.5, 0));
-      g.add(m3(box(1.04, 0.12, 1.04), M.woodDark, 0, 0.85, 0));
-      g.add(m3(box(1.04, 0.12, 1.04), M.woodDark, 0, 0.15, 0));
       break;
     case 'armario':
       w = 1; d = 0.6; h = 2;
       g.add(m3(box(1, 2, 0.6), M.metal, 0, 1, 0));
-      g.add(m3(box(0.03, 1.8, 0.62), M.steel, 0, 1, 0));
       break;
     case 'carro': {
       w = 2; d = 4.2; h = 1.6;
-      const col = mat(pick(CAR_COLORS, r), { metalness: 0.45, roughness: 0.5 });
-      const body = m3(carBodyGeo, col, 0, 0.62, 0); g.add(body);
-      g.add(m3(carCabinGeo, M.glass, 0, 1.12, -0.25));
-      g.add(m3(lightGeo, M.light, -0.65, 0.68, 2.08));
-      g.add(m3(lightGeo, M.light, 0.65, 0.68, 2.08));
-      for (const [x, z] of [[-0.95, 1.3], [0.95, 1.3], [-0.95, -1.3], [0.95, -1.3]]) {
-        const wh = m3(wheelGeo, M.tire, x, 0.38, z); wh.rotation.z = Math.PI / 2; g.add(wh);
-      }
+      const hex = pick(CAR_COLORS, r), pm = (map) => mat(0xffffff, { map, metalness: 0.3, roughness: 0.55 });
+      const side = pm(PIX.carPaint(hex)), col = pm(PIX.carTop(hex));
+      // faces da caixa: +x, -x (portas), +y (capô), -y, +z (frente com grade), -z (traseira com lanternas)
+      g.add(m3(carBodyGeo, [side, side, col, M.bumper, pm(PIX.carFront(hex)), pm(PIX.carBack(hex))], 0, 0.7, 0));
+      g.add(m3(carCabinGeo, M.glass, 0, 1.27, -0.25));
+      g.add(m3(box(1.86, 0.08, 2.26), col, 0, 1.57, -0.25)); // teto
+      for (const z of [2.12, -2.12]) g.add(m3(box(2.04, 0.22, 0.12), M.bumper, 0, 0.5, z)); // para-choques
+      g.add(m3(lightGeo, M.light, -0.68, 0.82, 2.12));
+      g.add(m3(lightGeo, M.light, 0.68, 0.82, 2.12));
+      for (const [x, z] of [[-0.92, 1.3], [0.92, 1.3], [-0.92, -1.3], [0.92, -1.3]]) g.add(m3(wheelGeo, M.tire, x, 0.36, z));
       break;
     }
     case 'militar':
       w = 1.6; d = 1; h = 0.8;
       g.add(m3(box(1.6, 0.8, 1), M.olive, 0, 0.4, 0));
-      g.add(m3(box(1.62, 0.12, 0.3), M.white, 0, 0.55, 0));
       break;
     case 'cofre':
       w = 1; d = 1; h = 1.2;
       g.add(m3(box(1, 1.2, 1), M.steel, 0, 0.6, 0));
-      { const dial = m3(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 12), M.gold, 0, 0.7, 0.52); dial.rotation.x = Math.PI / 2; g.add(dial); }
+      g.add(m3(box(0.26, 0.26, 0.06), M.gold, 0, 0.7, 0.52)); // segredo
       break;
     case 'tesouro':
       w = 1.6; d = 1.1; h = 1;
       g.add(m3(box(1.6, 0.8, 1.1), M.purple, 0, 0.4, 0));
-      g.add(m3(box(1.66, 0.2, 1.16), M.gold, 0, 0.85, 0));
+      g.add(m3(box(1.66, 0.24, 1.16), M.purple, 0, 0.88, 0)); // tampa
       break;
   }
   return { g, w, d, h };
@@ -177,19 +137,20 @@ function containerMesh(type, r) {
 // ---------- Ninho de zumbis ----------
 function nestMesh(mother) {
   const g = new THREE.Group();
-  const flesh = mat(0x5a1a2e, { roughness: 0.6, emissive: 0x8a1aff, emissiveIntensity: 0.4 });
+  const fleshTex = PIX.flesh();
+  const flesh = mat(0xffffff, { map: fleshTex, roughness: 0.6, emissive: 0xb050ff, emissiveMap: fleshTex, emissiveIntensity: 0.4 });
   const vein = new THREE.MeshBasicMaterial({ color: 0xc040ff });
   const goo = new THREE.Mesh(new THREE.CircleGeometry(mother ? 7 : 3.6, 24), new THREE.MeshStandardMaterial({ color: 0x3a0f3a, roughness: 0.3, transparent: true, opacity: 0.85 }));
   goo.rotation.x = -Math.PI / 2; goo.position.y = 0.03; goo.receiveShadow = true;
   g.add(goo);
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 1), flesh);
+  const core = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.2, 2.2), flesh);
   core.position.y = 1.1; core.scale.set(1, 1.25, 1); core.castShadow = true;
   g.add(core);
-  const veins = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4, 1), vein);
-  veins.material = new THREE.MeshBasicMaterial({ color: 0xc040ff, wireframe: true, transparent: true, opacity: 0.6 });
+  // gaiola de arestas brilhantes em volta do cubo
+  const veins = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.4, 2.4, 2.4)), new THREE.LineBasicMaterial({ color: 0xc040ff, transparent: true, opacity: 0.8 }));
   veins.position.copy(core.position); veins.scale.copy(core.scale);
   g.add(veins);
-  const tGeo = new THREE.CylinderGeometry(0.08, 0.28, 2.4, 6);
+  const tGeo = new THREE.BoxGeometry(0.34, 2.4, 0.34);
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2;
     const t = new THREE.Mesh(tGeo, flesh);
@@ -198,7 +159,7 @@ function nestMesh(mother) {
     t.castShadow = true;
     g.add(t);
   }
-  const eggGeo = new THREE.SphereGeometry(0.3, 8, 6);
+  const eggGeo = new THREE.BoxGeometry(0.46, 0.46, 0.46);
   for (let i = 0; i < 6; i++) {
     const a = Math.random() * Math.PI * 2, rr = 2 + Math.random() * 1.2;
     const e = new THREE.Mesh(eggGeo, flesh);
@@ -346,23 +307,24 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     if (lootable) { addContainer('carro', x, z, rotY); return; }
     // carcaça queimada (só cenário + colisão)
     const burnt = 0x2a2522;
-    const g1 = new THREE.CapsuleGeometry(0.4, 3.3, 4, 10); g1.rotateX(Math.PI / 2); g1.scale(2.4, 1, 1); colorize(g1, burnt, 0.3, r); g1.rotateY(rotY); g1.translate(x, 0.55, z); plainGeos.push(g1);
-    const g2 = new THREE.CapsuleGeometry(0.33, 1.4, 4, 10); g2.rotateX(Math.PI / 2); g2.scale(2.5, 1, 1); colorize(g2, 0x1a1816, 0.2, r); g2.rotateY(rotY); g2.translate(x, 1.0, z - 0.1); plainGeos.push(g2);
+    const g1 = new THREE.BoxGeometry(2.0, 0.62, 4.2); colorize(g1, burnt, 0.3, r); g1.rotateY(rotY); g1.translate(x, 0.6, z); plainGeos.push(g1);
+    const g2 = new THREE.BoxGeometry(1.8, 0.5, 2.0); colorize(g2, 0x1a1816, 0.2, r); g2.translate(0, 0, -0.2); g2.rotateY(rotY); g2.translate(x, 1.15, z); plainGeos.push(g2);
+    for (const [wx, wz] of [[-0.92, 1.3], [0.92, 1.3], [-0.92, -1.3], [0.92, -1.3]]) { const wg = new THREE.BoxGeometry(0.28, 0.6, 0.6); colorize(wg, 0x121110, 0.2, r); wg.translate(wx, 0.3, wz); wg.rotateY(rotY); wg.translate(x, 0, z); plainGeos.push(wg); }
     const along = Math.abs(Math.sin(rotY)) > 0.7;
     const hw = along ? 2.1 : 1, hd = along ? 1 : 2.1;
     addCollider(x - hw, z - hd, x + hw, z + hd, 1.4);
   }
   function tree(x, z) {
     const h = rand(2.5, 4.2, r);
-    addPlain(0, 0, 0, x, h / 2, z, 0x3a2e22, { geo: new THREE.CylinderGeometry(0.12, 0.25, h, 6) });
+    addPlain(0.42, h, 0.42, x, h / 2, z, 0x3a2e22);
     for (let i = 0; i < 3; i++) {
       const bl = rand(1, 1.8, r);
-      addPlain(0, 0, 0, x, h * rand(0.6, 0.95, r), z, 0x3a2e22, { geo: new THREE.CylinderGeometry(0.04, 0.09, bl, 5), rotZ: rand(-1, 1, r), rotY: rand(0, 6, r) });
+      addPlain(0.16, bl, 0.16, x, h * rand(0.6, 0.95, r), z, 0x3a2e22, { rotZ: rand(-1, 1, r), rotY: rand(0, 6, r) });
     }
     addCollider(x - 0.35, z - 0.35, x + 0.35, z + 0.35, h);
   }
   function fireBarrel(x, z) {
-    addPlain(0, 0, 0, x, 0.5, z, 0x5a3a22, { geo: new THREE.CylinderGeometry(0.4, 0.4, 1, 10) });
+    addPlain(0.74, 1, 0.74, x, 0.5, z, 0x5a3a22);
     addCollider(x - 0.45, z - 0.45, x + 0.45, z + 0.45, 1);
     fireSpots.push({ x, z, y: 1.1 });
   }
@@ -971,7 +933,9 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     return tex;
   }
   // relevo fino em mosaico sobre o chão pintado: o asfalto "pega" a luz (grão e microfissuras)
+  groundTex.magFilter = THREE.NearestFilter; // pixels nítidos, como o resto do mundo em blocos
   const groundBump = asphaltBump(Math.round(S / 3));
+  groundBump.magFilter = THREE.NearestFilter;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(S, S), new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.92, bumpMap: groundBump, bumpScale: lowPower ? 0.6 : 1.1 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
   group.add(ground);

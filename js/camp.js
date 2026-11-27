@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lowPower } from './device.js';
+import { PIX } from './pixtex.js';
 
 // ---------- texturas procedurais ----------
 const texCache = new Map();
@@ -172,36 +173,15 @@ function ridgeTentGeo(w, d, h) {
   return g;
 }
 // pedra irregular (icosaedro deformado de forma estável)
+// pedra em bloco (tamanho e giro variados — estilo blocos)
 function rockGeo(seed, r = 0.2) {
-  const g = new THREE.IcosahedronGeometry(r, 1);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const k = 1 + 0.22 * Math.sin(x * 17 + seed) * Math.cos(z * 13 + seed * 2) + 0.1 * Math.sin(y * 23 + seed * 3);
-    p.setXYZ(i, x * k, y * k * 0.7, z * k);
-  }
-  g.computeVertexNormals();
+  const k = (n) => 0.75 + ((Math.sin(seed * n) + 1) / 2) * 0.5;
+  const g = new THREE.BoxGeometry(r * 1.7 * k(3.1), r * 1.1 * k(5.3), r * 1.5 * k(7.7));
+  g.rotateY(seed);
   return g;
 }
-// saco de areia: cápsula achatada com pontas amarradas
-function sandbagGeo() {
-  const g = new THREE.CapsuleGeometry(0.17, 0.42, 4, 10);
-  g.rotateZ(Math.PI / 2);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setY(i, y * (y > 0 ? 0.62 : 0.5)); p.setZ(i, p.getZ(i) * 1.25); }
-  g.computeVertexNormals();
-  g.translate(0, 0.085, 0);
-  return g;
-}
-// tambor de óleo com frisos
-function drumGeo() {
-  const pts = [];
-  const r = 0.29, h = 0.88;
-  pts.push(new THREE.Vector2(0, 0), new THREE.Vector2(r - 0.01, 0), new THREE.Vector2(r, 0.02));
-  for (const y of [0.29, 0.59]) pts.push(new THREE.Vector2(r, y - 0.02), new THREE.Vector2(r + 0.012, y), new THREE.Vector2(r, y + 0.02));
-  pts.push(new THREE.Vector2(r, h - 0.02), new THREE.Vector2(r - 0.01, h), new THREE.Vector2(r - 0.02, h - 0.015), new THREE.Vector2(0, h - 0.015));
-  return new THREE.LatheGeometry(pts, 20);
-}
+function sandbagGeo() { const g = new THREE.BoxGeometry(0.6, 0.2, 0.36); g.translate(0, 0.1, 0); return g; }
+function drumGeo() { const g = new THREE.BoxGeometry(0.58, 0.88, 0.58); g.translate(0, 0.44, 0); return g; }
 
 // ---------- cena ----------
 export function buildCampScene() {
@@ -288,19 +268,19 @@ export function buildCampScene() {
     const st = add(track(rockGeo(i * 3.7, 0.12 + Math.random() * 0.05)), stoneMat, Math.cos(a) * 0.74, 0.05, Math.sin(a) * 0.74, Math.random() * 6);
     st.material = stoneMat;
   }
-  const logMat = track(new THREE.MeshStandardMaterial({ map: barkTex(), roughness: 0.95, color: 0x9a8a78 }));
+  const logMat = track(new THREE.MeshStandardMaterial({ map: PIX.bark(), roughness: 0.95, color: 0x9a8a78 }));
   const charMat = track(new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 1, emissive: 0xff4a10, emissiveIntensity: 0.0 }));
-  const logGeo = track(new THREE.CylinderGeometry(0.045, 0.06, 0.95, 7));
+  const logGeo = track(new THREE.BoxGeometry(0.120, 0.95, 0.120));
   for (let i = 0; i < 5; i++) { // lenha em pirâmide aberta, encostada no centro
     const a = (i / 5) * Math.PI * 2 + 0.3;
     const log = add(logGeo, logMat, Math.cos(a) * 0.36, 0.26, Math.sin(a) * 0.36);
     log.lookAt(0, 0.7, 0); log.rotateX(Math.PI / 2);
   }
   for (const a of [0.4, 2.1]) { // toras deitadas na base, meio queimadas
-    const log = add(track(new THREE.CylinderGeometry(0.07, 0.08, 0.9, 8)), logMat, 0, 0.07, 0, a);
+    const log = add(track(new THREE.BoxGeometry(0.160, 0.9, 0.160)), logMat, 0, 0.07, 0, a);
     log.rotation.z = Math.PI / 2;
   }
-  const embers = add(track(new THREE.SphereGeometry(0.42, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2)), charMat, 0, -0.02, 0, 0, false);
+  const embers = add(track(new THREE.BoxGeometry(0.8, 0.5, 0.8)), charMat, 0, -0.02, 0, 0, false);
   embers.scale.y = 0.28;
   const emberGlow = track(new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.85 }));
   for (let i = 0; i < 14; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.3; const e = add(P_EMBER(), emberGlow, Math.cos(a) * r, 0.06 + Math.random() * 0.05, Math.sin(a) * r, Math.random() * 6, false); e.scale.setScalar(0.5 + Math.random()); }
@@ -339,18 +319,18 @@ export function buildCampScene() {
     inside.position.z = d / 2 - 0.04; tent.add(inside);
     // mastros e cordas com estacas
     for (const sz of [-1, 1]) {
-      const pole = new THREE.Mesh(track(new THREE.CylinderGeometry(0.025, 0.025, h + 0.12, 6)), poleMat);
+      const pole = new THREE.Mesh(track(new THREE.BoxGeometry(0.050, h + 0.12, 0.050)), poleMat);
       pole.position.set(0, (h + 0.12) / 2, (sz * d) / 2 + sz * 0.03); pole.castShadow = true; tent.add(pole);
       const pts = [new THREE.Vector3(0, h + 0.08, (sz * d) / 2 + sz * 0.03), new THREE.Vector3(0, 0.02, (sz * d) / 2 + sz * 1.1)];
       tent.add(new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(pts)), ropeMat));
-      const stake = new THREE.Mesh(track(new THREE.CylinderGeometry(0.02, 0.01, 0.25, 5)), poleMat);
+      const stake = new THREE.Mesh(track(new THREE.BoxGeometry(0.040, 0.25, 0.040)), poleMat);
       stake.position.copy(pts[1]); stake.position.y = 0.08; stake.rotation.x = sz * 0.3; tent.add(stake);
     }
   }
 
   // ----- muro de sacos de areia (2 fiadas, desencontradas) -----
   {
-    const bagMat = track(new THREE.MeshStandardMaterial({ map: burlapTex(), roughness: 0.97, color: 0xc8bca0 }));
+    const bagMat = track(new THREE.MeshStandardMaterial({ map: PIX.sandbag(), roughness: 0.97, color: 0xc8bca0 }));
     const bag = track(sandbagGeo());
     const parts = [];
     for (let row = 0; row < 3; row++) for (let i = 0; i < 9 - row; i++) {
@@ -371,23 +351,23 @@ export function buildCampScene() {
   }
 
   // ----- caixotes e tambores -----
-  const crateMat = track(new THREE.MeshStandardMaterial({ map: woodTex(), roughness: 0.85 }));
-  const olive = track(new THREE.MeshStandardMaterial({ map: rustTex('olive', '#4a5233'), roughness: 0.7, metalness: 0.35 }));
+  const crateMat = track(new THREE.MeshStandardMaterial({ map: PIX.crate(), roughness: 0.85 }));
+  const olive = track(new THREE.MeshStandardMaterial({ map: PIX.military(), roughness: 0.7, metalness: 0.35 }));
   add(track(new THREE.BoxGeometry(0.9, 0.9, 0.9)), crateMat, 3.3, 0.45, 1.6, 0.35);
   add(track(new THREE.BoxGeometry(0.7, 0.7, 0.7)), crateMat, 3.3, 1.25, 1.55, 0.1);
   add(track(new THREE.BoxGeometry(1.3, 0.55, 0.62)), olive, 3.9, 0.275, 3.0, -0.25); // caixa de munição
-  const drumMat = [track(new THREE.MeshStandardMaterial({ map: rustTex('drumR', '#6a2a1e'), roughness: 0.65, metalness: 0.45 })), track(new THREE.MeshStandardMaterial({ map: rustTex('drumB', '#24384a'), roughness: 0.65, metalness: 0.45 }))];
+  const drumMat = [track(new THREE.MeshStandardMaterial({ map: PIX.rustBarrel(), color: 0xd08070, roughness: 0.65, metalness: 0.45 })), track(new THREE.MeshStandardMaterial({ map: PIX.rustBarrel(), color: 0x7090b0, roughness: 0.65, metalness: 0.45 }))];
   const drum = track(drumGeo());
   add(drum, drumMat[0], -3.4, 0, 2.6, 0.4);
   add(drum, drumMat[1], -2.85, 0, 3.1, 1.1);
   const tipped = add(drum, drumMat[0], 5.6, 0.29, 0.4, 0); tipped.rotation.z = Math.PI / 2; tipped.position.x += 0.44;
   // tronco para sentar
-  const seat = add(track(new THREE.CylinderGeometry(0.22, 0.25, 2.1, 10)), logMat, -1.9, 0.22, 1.7, 0.55);
+  const seat = add(track(new THREE.BoxGeometry(0.500, 2.1, 0.500)), logMat, -1.9, 0.22, 1.7, 0.55);
   seat.rotation.z = Math.PI / 2;
   // lampião aceso sobre o caixote (brilha com o bloom)
   const lantern = new THREE.Group();
-  lantern.add(new THREE.Mesh(track(new THREE.CylinderGeometry(0.07, 0.08, 0.04, 10)), poleMat));
-  const glass = new THREE.Mesh(track(new THREE.CylinderGeometry(0.055, 0.055, 0.14, 10)), track(new THREE.MeshBasicMaterial({ color: 0xffc46a })));
+  lantern.add(new THREE.Mesh(track(new THREE.BoxGeometry(0.160, 0.04, 0.160)), poleMat));
+  const glass = new THREE.Mesh(track(new THREE.BoxGeometry(0.110, 0.14, 0.110)), track(new THREE.MeshBasicMaterial({ color: 0xffc46a })));
   glass.position.y = 0.09; lantern.add(glass);
   const cap = new THREE.Mesh(track(new THREE.ConeGeometry(0.075, 0.07, 10)), poleMat); cap.position.y = 0.19; lantern.add(cap);
   lantern.position.set(3.25, 1.6, 1.5); scene.add(lantern);
@@ -399,7 +379,7 @@ export function buildCampScene() {
     fm.map.repeat.set(34, 2.8); fm.map.colorSpace = THREE.NoColorSpace;
     const fence = add(track(new THREE.PlaneGeometry(26, 2.1)), fm, 0, 1.05, -11.5, 0, false);
     fence.castShadow = false;
-    for (let i = 0; i <= 8; i++) add(track(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 6)), poleMat, -13 + i * 3.25, 1.25, -11.5);
+    for (let i = 0; i <= 8; i++) add(track(new THREE.BoxGeometry(0.080, 2.5, 0.080)), poleMat, -13 + i * 3.25, 1.25, -11.5);
     const wire = [];
     for (let i = 0; i <= 160; i++) { const x = -13 + i * 0.1625; wire.push(new THREE.Vector3(x, 2.35 + Math.sin(i * 1.7) * 0.03, -11.5 + Math.cos(i * 1.7) * 0.05)); }
     scene.add(new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(wire)), track(new THREE.LineBasicMaterial({ color: 0x77736c }))));
@@ -408,12 +388,12 @@ export function buildCampScene() {
   // ----- varal de lâmpadas entre mastros -----
   {
     const a = new THREE.Vector3(-6.5, 2.7, -2.2), b = new THREE.Vector3(5.5, 2.7, -2.6);
-    for (const p of [a, b]) add(track(new THREE.CylinderGeometry(0.05, 0.06, p.y, 6)), logMat, p.x, p.y / 2, p.z);
+    for (const p of [a, b]) add(track(new THREE.BoxGeometry(0.120, p.y, 0.120)), logMat, p.x, p.y / 2, p.z);
     const pts = [];
     for (let i = 0; i <= 30; i++) { const t = i / 30; const p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * 0.55; pts.push(p); }
     scene.add(new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(pts)), track(new THREE.LineBasicMaterial({ color: 0x1a1a1a }))));
     const bulbMat = track(new THREE.MeshBasicMaterial({ color: 0xffd08a }));
-    const bulbGeo = track(new THREE.SphereGeometry(0.045, 8, 6));
+    const bulbGeo = track(new THREE.BoxGeometry(0.08, 0.08, 0.08));
     for (let i = 2; i < 30; i += 3) { const p = pts[i]; const bm = new THREE.Mesh(bulbGeo, bulbMat); bm.position.set(p.x, p.y - 0.06, p.z); scene.add(bm); }
   }
 
@@ -489,7 +469,7 @@ export function buildCampScene() {
 }
 // brasa pequena (geometria compartilhada)
 let emberGeo = null;
-function P_EMBER() { return emberGeo || (emberGeo = new THREE.IcosahedronGeometry(0.03, 0)); }
+function P_EMBER() { return emberGeo || (emberGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05)); }
 
 // ============================================================
 //  Peças reutilizáveis no mapa (world.js): chamas e fogueira
@@ -533,8 +513,8 @@ export function makeFirePit(scale = 1) {
     st.position.set(Math.cos(a) * 0.74, 0.05, Math.sin(a) * 0.74); st.rotation.y = Math.random() * 6;
     st.castShadow = st.receiveShadow = true; group.add(st);
   }
-  const logMat = keep(new THREE.MeshStandardMaterial({ map: barkTex(), roughness: 0.95, color: 0x9a8a78 }));
-  const logGeo = keep(new THREE.CylinderGeometry(0.045, 0.06, 0.95, 7));
+  const logMat = keep(new THREE.MeshStandardMaterial({ map: PIX.bark(), roughness: 0.95, color: 0x9a8a78 }));
+  const logGeo = keep(new THREE.BoxGeometry(0.120, 0.95, 0.120));
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 + 0.3;
     const log = new THREE.Mesh(logGeo, logMat);
@@ -543,7 +523,7 @@ export function makeFirePit(scale = 1) {
     log.castShadow = true; group.add(log);
   }
   const charMat = keep(new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 1, emissive: 0xff4a10, emissiveIntensity: 1 }));
-  const embers = new THREE.Mesh(keep(new THREE.SphereGeometry(0.42, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2)), charMat);
+  const embers = new THREE.Mesh(keep(new THREE.BoxGeometry(0.8, 0.5, 0.8)), charMat);
   embers.scale.y = 0.28; embers.position.y = -0.02; group.add(embers);
   const flames = makeFlames(5, 1);
   flames.group.position.y = 0.05;

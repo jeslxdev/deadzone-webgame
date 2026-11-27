@@ -42,6 +42,7 @@ function sanitizeAppearance(a, prev) {
     top: HEX(a.top, d.top), pants: HEX(a.pants, d.pants), shoes: HEX(a.shoes, d.shoes), pack: HEX(a.pack, d.pack ?? 0x3e6b3a),
     hairStyle: KEYOF(a.hairStyle, D.HAIR_STYLES, d.hairStyle), beard: KEYOF(a.beard, D.BEARDS, d.beard),
     accessory: KEYOF(a.accessory, D.ACCESSORIES, d.accessory), build: KEYOF(a.build, D.BUILDS, d.build),
+    body: KEYOF(a.body, D.BODY_TYPES, d.body || 'm'),
     height: Math.min(1.12, Math.max(0.88, Number(a.height) || 1)),
   };
   if (a.sleeves === 'short' || a.sleeves === 'long') out.sleeves = a.sleeves;

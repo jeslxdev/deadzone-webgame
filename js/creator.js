@@ -2,7 +2,7 @@
 //  EDITOR DE PERSONAGEM — visual + escolha de classe
 // ============================================================
 import * as THREE from 'three';
-import { CLASSES, WEAPONS, SKIN_COLORS, HAIR_COLORS, CLOTH_COLORS, EYE_COLORS, HAIR_STYLES, BEARDS, ACCESSORIES, BUILDS, defaultAppearance } from './data.js';
+import { CLASSES, WEAPONS, SKIN_COLORS, HAIR_COLORS, CLOTH_COLORS, EYE_COLORS, HAIR_STYLES, BEARDS, ACCESSORIES, BUILDS, BODY_TYPES, defaultAppearance } from './data.js';
 import { createProfile, saveProfile, makeWeapon } from './rpg.js';
 import { buildHumanoid } from './character.js';
 import { el, hexToCss, pick, rand, escapeHtml } from './util.js';
@@ -132,9 +132,10 @@ export class Creator {
     const ch = (key, obj) => `<div class="chips">${Object.entries(obj).map(([k, v]) => `<button class="chip ${ap[key] === k ? 'sel' : ''}" data-k="${key}" data-s="${k}">${v}</button>`).join('')}</div>`;
     const box = this.root.querySelector('#c-opts');
     box.innerHTML = `
+      <div class="field"><label>Corpo</label>${ch('body', BODY_TYPES)}</div>
       <div class="field"><label>Pele</label>${sw('skin', SKIN_COLORS)}</div>
       <div class="field skin-hair-field"><label>Cabelo</label>${ch('hairStyle', HAIR_STYLES)}${sw('hair', HAIR_COLORS)}</div>
-      <div class="field"><label>Barba</label>${ch('beard', BEARDS)}</div>
+      ${ap.body === 'f' ? '' : `<div class="field"><label>Barba</label>${ch('beard', BEARDS)}</div>`}
       <div class="field"><label>Olhos</label>${sw('eyes', EYE_COLORS)}</div>
       <div class="field"><label>Acessório</label>${ch('accessory', ACCESSORIES)}</div>
       <div class="field"><label>Camisa / Jaqueta</label>${sw('top', CLOTH_COLORS)}</div>
@@ -144,8 +145,17 @@ export class Creator {
       <div class="field"><label>Porte físico</label>${ch('build', BUILDS)}</div>
       <div class="field"><label>Altura <span class="dim" id="c-hv">${Math.round(ap.height * 180)} cm</span></label><input type="range" id="c-h" min="0.88" max="1.12" step="0.01" value="${ap.height}"></div>`;
     box.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { ap[b.dataset.k] = Number(b.dataset.v); this.afterChange(); });
-    box.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => { ap[b.dataset.k] = b.dataset.s; this.afterChange(); });
-    box.querySelector('#c-h').oninput = (e) => { ap.height = Number(e.target.value); box.querySelector('#c-hv').textContent = Math.round(ap.height * 180) + ' cm'; this.rebuild(); };
+    box.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => {
+      ap[b.dataset.k] = b.dataset.s;
+      if (b.dataset.k === 'body' && ap.body === 'f') { // sugestões ao trocar para feminino
+        ap.beard = 'nenhuma';
+        if (['careca', 'curto', 'moicano'].includes(ap.hairStyle)) ap.hairStyle = 'longo';
+      }
+      this.afterChange();
+    });
+    const baseCm = () => (ap.body === 'f' ? 168 : 180);
+    box.querySelector('#c-hv').textContent = Math.round(ap.height * baseCm()) + ' cm';
+    box.querySelector('#c-h').oninput = (e) => { ap.height = Number(e.target.value); box.querySelector('#c-hv').textContent = Math.round(ap.height * baseCm()) + ' cm'; this.rebuild(); };
   }
 
   loadSkin(file, modeledHair = true) {
@@ -181,8 +191,10 @@ export class Creator {
 
   randomize() {
     const ap = this.ap;
-    ap.skin = pick(SKIN_COLORS); ap.hair = pick(HAIR_COLORS); ap.hairStyle = pick(Object.keys(HAIR_STYLES));
-    ap.beard = pick(Object.keys(BEARDS)); ap.eyes = pick(EYE_COLORS); ap.accessory = pick(Object.keys(ACCESSORIES));
+    ap.body = Math.random() < 0.5 ? 'f' : 'm';
+    ap.skin = pick(SKIN_COLORS); ap.hair = pick(HAIR_COLORS);
+    ap.hairStyle = ap.body === 'f' ? pick(['longo', 'rabo', 'chanel', 'coque', 'afro', 'curto']) : pick(Object.keys(HAIR_STYLES));
+    ap.beard = ap.body === 'f' ? 'nenhuma' : pick(Object.keys(BEARDS)); ap.eyes = pick(EYE_COLORS); ap.accessory = pick(Object.keys(ACCESSORIES));
     ap.top = pick(CLOTH_COLORS); ap.pants = pick(CLOTH_COLORS); ap.shoes = pick(CLOTH_COLORS); ap.pack = pick(CLOTH_COLORS);
     ap.build = pick(Object.keys(BUILDS)); ap.height = Math.round(rand(0.9, 1.1) * 100) / 100;
     this.renderOptions();
