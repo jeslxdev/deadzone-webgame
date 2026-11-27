@@ -50,7 +50,7 @@ async function loadSamples() {
   } catch {}
 }
 const lastSample = {};
-function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, delay = 0 } = {}) {
+function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, delay = 0, cutoff = 0 } = {}) {
   const list = samples[ev];
   if (!list || !list.length) return false;
   const src = ctx.createBufferSource();
@@ -61,7 +61,11 @@ function playSample(ev, { gain = 1, pan = 0, rate = 1, rev = 0, bus = sfxBus, de
   lastSample[ev] = index;
   src.buffer = list[index];
   src.playbackRate.value = rate * (0.95 + Math.random() * 0.1);
-  src.connect(out({ gain, pan, rev, bus }));
+  const output = out({ gain, pan, rev, bus });
+  if (cutoff) {
+    const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = cutoff;
+    src.connect(filter); filter.connect(output);
+  } else src.connect(output);
   src.start(ctx.currentTime + delay);
   return true;
 }
@@ -429,10 +433,12 @@ function footstep(run, theme) {
 
 // ---------- API pública ----------
 export const sfx = {
-  shot(kind, pan = 0, gain = 1) {
+  shot(kind, pan = 0, gain = 1, rapid = false) {
     if (!ctx || throttle(gain < 1 ? 'remoteShot' : 'shot', 30)) return;
     const gun = GUNS[kind] || GUNS.pistola;
-    if (!playSample('shot_' + kind, { gain: gun.gain * gain, pan, rev: gun.rev * 0.16 })) gunshot(kind, pan, gain);
+    // A rajada concentra energia sem acumular uma nova cauda reverberante a cada bala.
+    const burstGain = rapid ? 0.53 : kind === 'smg' ? 0.78 : 1;
+    if (!playSample('shot_' + kind, { gain: gun.gain * gain * burstGain, pan, rev: rapid ? 0 : gun.rev * 0.10, rate: rapid ? 0.94 : 1, cutoff: rapid ? 3500 : 0 })) gunshot(kind, pan, gain * burstGain);
     const t = ctx.currentTime;
     if (gun.pump) { mech(t + 0.42, pan, 0.5 * gain); mech(t + 0.56, pan, 0.6 * gain, 1800); }
     if (gun.bolt) { mech(t + 0.5, pan, 0.4 * gain, 2600); mech(t + 0.7, pan, 0.5 * gain, 1600); }

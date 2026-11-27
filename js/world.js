@@ -723,6 +723,44 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
     }
   }
 
+  // Marcos na periferia dão identidade a cada zona e mantêm as rotas livres.
+  const landmarkX = half + 9, landmarkZ = -half * 0.25;
+  if (theme === 'port') {
+    for (const z of [landmarkZ,landmarkZ+25]) {
+      for(const x of [landmarkX,landmarkX+12]) addPlain(0.8,23,0.8,x,11.5,z,0xa78044);
+      addPlain(24,0.7,0.8,landmarkX+6,23,z,0xc09b52);
+      addPlain(0.08,15,0.08,landmarkX-4,15,z,0x353b3b);
+      addPlain(3.8,0.35,0.45,landmarkX-4,7.6,z,0x353b3b);
+    }
+  } else if(theme === 'military') {
+    for(const z of [landmarkZ,landmarkZ+26]) {
+      for(const dx of [-2.2,2.2])for(const dz of [-2.2,2.2])addPlain(0.35,11,0.35,landmarkX+dx,5.5,z+dz,0x4d594d);
+      addPlain(5.8,2.5,5.8,landmarkX,11.8,z,0x5e6854);
+      addPlain(6.4,0.25,6.4,landmarkX,13.2,z,0x343d35);
+      addPlain(0.15,7,0.15,landmarkX,17,z,0x515e5e);
+    }
+  } else if(theme === 'suburb') {
+    for(let i=0;i<8;i++){
+      const z=-half+12+i*21;
+      addPlain(8,4.6,9,landmarkX,2.3,z,0x9b8b73);
+      addPlain(0,0,0,landmarkX,5.2,z,0x55413b,{geo:new THREE.ConeGeometry(7.3,2.6,4),rotY:Math.PI/4});
+      addPlain(0.8,2.8,0.8,landmarkX+2,6.4,z+1,0x6d5345);
+    }
+  } else {
+    for(let i=0;i<5;i++){
+      const z=-half+15+i*30;
+      addPlain(12,18+i*3,12,landmarkX+8,(18+i*3)/2,z,0x6e7778);
+      addPlain(0.25,6,0.25,landmarkX+8,21+i*3,z,0x474b49);
+    }
+  }
+  // Faixas de travessia e balizadores nos acessos da rua.
+  for(let k=1;k<N;k++){
+    const a=-half+k*P;
+    for(let line=0;line<5;line++){
+      addPlain(0.7,0.015,2.8,a+1+line*1.25,0.026,-half+ROAD+2,theme==='military'?0xc6b36c:0xb6b6a7,{jitter:0.03});
+    }
+  }
+
   // ----- borda do mapa e skyline externa -----
   const wallH = 3.2;
   addPlain(S + 2, wallH, 1, 0, wallH / 2, -half - 0.5, 0x6a6660, { collide: true });
@@ -732,10 +770,16 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
   for (let side = 0; side < 4; side++) {
     for (let t = -half - 20; t < half + 20; t += rand(10, 16, r)) {
       const off = half + rand(6, 14, r);
-      const w = rand(8, 14, r), d = rand(8, 14, r), h = theme === 'suburb' ? rand(4, 9, r) : rand(10, 34, r);
+      const w = rand(8, 14, r), d = rand(8, 14, r);
+      const h = theme === 'city' ? rand(10,34,r) : theme === 'suburb' ? rand(4,7,r) : theme === 'port' ? rand(4,9,r) : rand(3,6,r);
       const x = side < 2 ? t : (side === 2 ? -off : off);
       const z = side < 2 ? (side === 0 ? -off : off) : t;
-      addBuilding(x, z, w, d, h, pick(col.building, r), false);
+      if (theme === 'city' || theme === 'suburb') addBuilding(x, z, w, d, h, pick(col.building, r), false);
+      else {
+        addPlain(w,h,d,x,h/2,z,theme==='port'?0x6f7c7d:0x576251);
+        addPlain(w+0.5,0.25,d+0.5,x,h+0.13,z,0x373f3c);
+        for(let bay=0;bay<3;bay++)addPlain(0.04,h*0.6,d*0.17,x-w/2-0.03,h*0.34,z+(bay-1)*d*0.25,0x343b3b);
+      }
     }
   }
 

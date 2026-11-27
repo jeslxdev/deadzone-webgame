@@ -171,7 +171,13 @@ function reconcile(old, client, run) {
       }
     }
   }
-  out.stash = stash.slice(0, 400);
+  // Um salvamento antigo pode omitir armas compradas enquanto estava em trânsito.
+  // Exclusão de arma pertence à venda autoritativa, nunca ao salvamento do layout.
+  const ownedWeapons = new Set([...(old.stash || []), old.equipped, old.secondary].filter(Boolean).map(it => it.uid));
+  for (const [id, weapon] of poolW) {
+    if (ownedWeapons.has(id)) stash.push(serverItem(weapon));
+  }
+  out.stash = stash;
   if (run) {
     // armas emitidas que entraram no estoque saem da lista pendente
     for (const k of [...run.issued.keys()]) if (used.has(k)) run.issued.delete(k);
@@ -372,12 +378,15 @@ function shopBuy(p, id) {
   return got;
 }
 function sell(p, uids, allValuables) {
+  if (!allValuables && (!uids.length || uids.some(id => !p.stash.some(it => it.uid === id && validItem(it))))) {
+    throw new Error('O arsenal foi atualizado. Selecione novamente o item para vender.');
+  }
   const mult = R.deriveStats(p).moneyMult;
   let total = 0;
   const keep = [];
   for (const it of p.stash) {
     const sellIt = allValuables ? it.kind === 'valuable' : uids.includes(it.uid);
-    if (sellIt && validItem(it)) total += Math.round(R.itemValue(it) * mult);
+    if (sellIt && validItem(it) && R.itemValue(it) > 0) total += Math.round(R.itemValue(it) * mult);
     else keep.push(it);
   }
   p.stash = keep;

@@ -106,6 +106,7 @@ export class Hub {
     if (this.tab === 'arsenal') this.renderArsenal(body);
     if (this.tab === 'shop') this.renderShop(body);
     if (this.tab === 'skills') this.renderSkills(body);
+    if (this.shopPending) body.querySelectorAll('button').forEach(b => { b.disabled = true; });
   }
 
   mapUnlocked(i) {
@@ -272,9 +273,14 @@ export class Hub {
     const un = body.querySelector('#ar-unsec');
     if (un) un.onclick = () => { p.stash.push(p.secondary); p.secondary = null; done(); };
     // com servidor: a venda acontece lá (o preço e o dinheiro são calculados no servidor)
-    const sellOnServer = (uids, all) => auth.sell(p, uids, all)
+    const sellOnServer = (uids, all) => {
+      if (this.shopPending) return;
+      this.shopPending = true; this.renderUI();
+      return auth.sell(p, uids, all)
       .then((r) => { r.total ? (all ? sfx.rare() : sfx.pickup()) : 0; toast(`${all ? 'Vendido: ' : ''}+${fmtMoney(r.total)}`, 'loot'); this.renderUI(); })
-      .catch((e) => toast('Venda recusada: ' + e.message, 'warn'));
+      .catch((e) => toast('Venda recusada: ' + e.message, 'warn'))
+      .finally(() => { this.shopPending = false; this.renderUI(); });
+    };
     body.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => {
       if (auth.on) { b.disabled = true; return sellOnServer([b.dataset.sell], false); }
       const i = p.stash.findIndex((x) => x.uid === b.dataset.sell);
@@ -342,7 +348,10 @@ export class Hub {
       const s = SHOP.find((x) => x.id === b.dataset.buy);
       if (p.money < s.price) return;
       if (auth.on) { // compra feita no servidor: ele cobra e sorteia a arma
+        if (this.shopPending) return;
+        this.shopPending = true;
         b.disabled = true;
+        this.renderUI();
         auth.buy(p, s.id).then((r) => {
           if (r.got.kind === 'weapon') {
             const i = itemInfo(r.got);
@@ -350,7 +359,8 @@ export class Hub {
             r.got.rarity >= 3 ? sfx.rare() : sfx.pickup();
           } else { sfx.pickup(); toast(`Comprado: ${s.name}`); }
           this.renderUI();
-        }).catch((e) => { toast('Compra recusada: ' + e.message, 'warn'); this.renderUI(); });
+        }).catch((e) => { toast('Compra recusada: ' + e.message, 'warn'); })
+          .finally(() => { this.shopPending = false; this.renderUI(); });
         return;
       }
       p.money -= s.price;

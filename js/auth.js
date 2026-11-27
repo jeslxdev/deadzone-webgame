@@ -4,7 +4,7 @@
 //  resultado; editar variáveis no console não muda o personagem salvo.
 //  Sem servidor (hospedagem estática) o jogo segue local, como antes.
 // ============================================================
-import { storeMode, adoptProfile } from './rpg.js';
+import { storeMode, adoptProfile, savesSettled } from './rpg.js';
 import { POINTS_PER_LEVEL, START_SKILLS } from './data.js';
 
 async function post(url, body, keepalive = false) {
@@ -65,11 +65,13 @@ export const auth = {
   },
 
   async buy(profile, id) {
+    await savesSettled();
     const r = await post('/api/shop/buy', { profileId: profile.id, id });
     adoptProfile(profile, r.profile);
     return r;
   },
   async sell(profile, uids, all = false) {
+    await savesSettled();
     const r = await post('/api/shop/sell', { profileId: profile.id, uids, all });
     adoptProfile(profile, r.profile);
     return r;

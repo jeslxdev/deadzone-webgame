@@ -56,9 +56,10 @@ export function adoptProfile(p, server, full = true) {
   return p;
 }
 const inflight = new Set();
+let saveChain = Promise.resolve();
 function pushSave(p, keepalive = false) {
   const body = JSON.stringify(p);
-  const job = fetch('/api/profiles/' + p.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: keepalive && body.length < 60000 })
+  const job = saveChain.then(() => fetch('/api/profiles/' + p.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: keepalive && body.length < 60000 }))
     .then((r) => (r.ok ? r.json() : null))
     .then((r) => {
       // só substitui tudo se nada mudou localmente depois do envio
@@ -67,6 +68,7 @@ function pushSave(p, keepalive = false) {
     .catch(() => {})
     .finally(() => inflight.delete(job));
   inflight.add(job);
+  saveChain = job;
   return job;
 }
 export function flushSaves(keepalive = true) {

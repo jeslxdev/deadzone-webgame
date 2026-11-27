@@ -230,11 +230,36 @@ export function buildCampScene() {
 
   const tentSpecs = [[-4.8, -4.2, 0.35, '#4f5a33', 3.0, 3.6, 1.9], [4.9, -4.6, -0.42, '#6a5a3a', 2.6, 3.2, 1.7], [-8.2, 1.4, 1.2, '#3e4a40', 2.8, 3.4, 1.8]];
   // ----- chão -----
-  const groundMat = track(new THREE.MeshStandardMaterial({ map: dirtTex(), bumpMap: dirtBump(), bumpScale: 1.4, roughness: 0.96, color: 0xb8b0a4 }));
+  const groundMat = track(new THREE.MeshStandardMaterial({ map: dirtTex(), bumpMap: dirtBump(), bumpScale: 0.16, roughness: 0.96, color: 0xb8b0a4 }));
   const ground = add(new THREE.PlaneGeometry(120, 120), groundMat, 0, 0, 0, 0, false);
   ground.rotation.x = -Math.PI / 2;
   const scorch = add(new THREE.PlaneGeometry(4.2, 4.2), track(new THREE.MeshStandardMaterial({ map: scorchTex(), transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2 })), 0, 0.01, 0, 0, false);
   scorch.rotation.x = -Math.PI / 2;
+  // Setores de serviço em torno de uma praça central livre.
+  const slab = track(new THREE.MeshStandardMaterial({color:0x68655c,roughness:0.9}));
+  const frame = track(new THREE.MeshStandardMaterial({color:0x333d3d,metalness:0.45,roughness:0.55}));
+  const canvas = track(new THREE.MeshStandardMaterial({color:0x777357,roughness:0.95}));
+  for (let row=0;row<9;row++) {
+    for (const side of [-1,1]) add(track(new THREE.BoxGeometry(0.9,0.06,0.9)),slab,side*0.55,0.018,2.3+row*0.94,0,false);
+  }
+  // Arsenal coberto, bancada de manutenção e painel de energia.
+  for (const x of [5.1,8.1]) for(const z of [1.2,4.4]) add(track(new THREE.BoxGeometry(0.09,2.5,0.09)),frame,x,1.25,z);
+  add(track(new THREE.BoxGeometry(3.5,0.13,3.6)),canvas,6.6,2.55,2.8);
+  add(track(new THREE.BoxGeometry(2.8,0.14,0.9)),frame,6.6,0.94,2.5);
+  for(const x of [5.5,7.7]) add(track(new THREE.BoxGeometry(0.08,0.9,0.6)),frame,x,0.45,2.5);
+  for(let i=0;i<3;i++) {
+    add(track(new THREE.BoxGeometry(0.46,0.4,0.64)),canvas,5.7+i*0.7,0.24,3.6);
+    add(track(new THREE.BoxGeometry(0.5,0.045,0.68)),frame,5.7+i*0.7,0.46,3.6);
+  }
+  const panel=track(new THREE.MeshStandardMaterial({color:0x233a4a,metalness:0.4,roughness:0.3}));
+  const solar=add(track(new THREE.BoxGeometry(2.1,0.08,1.6)),panel,-5.8,1.15,5.8);
+  solar.rotation.x=-0.32;
+  for(const x of [-6.6,-5]) add(track(new THREE.BoxGeometry(0.07,1.1,0.07)),frame,x,0.55,5.8);
+  for(const z of [2.4,5.4,8.4])for(const x of [-1.7,1.7]){
+    add(track(new THREE.BoxGeometry(0.1,0.55,0.1)),frame,x,0.275,z);
+    const glow=track(new THREE.MeshStandardMaterial({color:0xffdc9f,emissive:0xffbd6c,emissiveIntensity:1.2}));
+    add(track(new THREE.BoxGeometry(0.16,0.12,0.16)),glow,x,0.56,z,0,false);
+  }
   // tufos de grama (instâncias), longe da fogueira e das barracas
   {
     const blade = new THREE.ConeGeometry(0.035, 0.42, 3); blade.translate(0, 0.21, 0);
@@ -249,7 +274,9 @@ export function buildCampScene() {
     while (n < count) {
       const a = Math.random() * Math.PI * 2, d = 3.2 + Math.pow(Math.random(), 0.7) * 16;
       p.set(Math.cos(a) * d, 0, Math.sin(a) * d);
-      if (Math.abs(p.x) < 8 && p.z < -2.5 && p.z > -9) continue; // área das barracas
+      if (Math.abs(p.x) < 1.9 && p.z > 1.8 && p.z < 11.2) continue;
+      if (p.x > 4.6 && p.x < 8.8 && p.z > 0.8 && p.z < 4.9) continue;
+      if (Math.abs(p.x) < 8 && p.z < -2.5 && p.z > -9) continue;
       if (tentSpecs.some(([tx, tz]) => Math.hypot(p.x - tx, p.z - tz) < 2.6)) continue;
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28);
       s.setScalar(0.6 + Math.random() * 0.9); s.y *= 0.7 + Math.random() * 0.8;

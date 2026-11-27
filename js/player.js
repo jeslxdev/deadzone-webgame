@@ -38,7 +38,7 @@ export class Player {
     this.kx = 0; this.kz = 0;
     this.atkCd = 0; this.reloadT = 0; this.ammo = 0;
     this.dashT = 0; this.dashCd = 0; this.dashDir = [0, 1];
-    this.y = 0; this.vy = 0; this.airborne = false; this.support = 0; this.airT = 0; // altura dos pés e pulo
+    this.y = 0; this.vy = 0; this.airborne = false; this.support = 0; this.airT = 0; this.jumps = 0;
     this.plunge = null; this.atkKind = null; this.spinAng = 0;
     this.trail = game.effects.makeTrail(); this.blade = null;
     this.invuln = 0;
@@ -243,7 +243,8 @@ export class Player {
       this.lastDash = g.time;
       sfx.dash();
     }
-    if (input.pressed('Space') && !this.airborne && !this.leap && !g.channel) {
+    if (input.pressed('Space') && this.jumps < 3 && !this.leap && !this.plunge && !g.channel) {
+      this.jumps++;
       this.vy = JUMP_V; this.airborne = true; this.airT = 0;
       sfx.jump();
     }
@@ -329,7 +330,7 @@ export class Player {
       this.y += this.vy * dt;
       if (this.y <= sup) {
         const fall = -this.vy;
-        this.y = sup; this.vy = 0; this.airborne = false;
+        this.y = sup; this.vy = 0; this.airborne = false; this.jumps = 0;
         if (this.plunge) this.plungeImpact();
         else if (fall > 3) {
           g.effects.particles(this.pos.x, sup + 0.08, this.pos.z, Math.min(12, (fall * 1.2) | 0), 0x8b8172, 1.8, 0.22, 0.5, -1);
@@ -437,7 +438,7 @@ export class Player {
     g.effects.casing(port.x, port.y, port.z, ang, base === 'escopeta');
     if (base === 'precisao') g.shake(0.12);
     this.recoil = Math.min(1.6, size);
-    sfx.shot(this.profile.equipped.base);
+    sfx.shot(this.profile.equipped.base, 0, 1, this.rapidT > 0);
     if (this.ammo <= 0 && this.rapidT <= 0) this.startReload();
   }
 
