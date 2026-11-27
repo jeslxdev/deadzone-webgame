@@ -3,6 +3,21 @@
 //  avisos de habilidades (telegraph) e números de dano.
 // ============================================================
 import * as THREE from 'three';
+import { lowPower } from './device.js';
+
+let smokeTexture;
+function smokeMap() {
+  if (smokeTexture) return smokeTexture;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(32,32,2,32,32,31);
+  gradient.addColorStop(0,'rgba(255,255,255,0.65)');
+  gradient.addColorStop(0.35,'rgba(255,255,255,0.38)');
+  gradient.addColorStop(1,'rgba(255,255,255,0)');
+  context.fillStyle = gradient; context.fillRect(0,0,64,64);
+  smokeTexture = new THREE.CanvasTexture(canvas);
+  return smokeTexture;
+}
 
 const pGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
 const tracerGeo = new THREE.BoxGeometry(0.05, 0.05, 1);
@@ -237,7 +252,22 @@ export class Effects {
   emitter(obj, offset, life = 0.9, color = 0x7a0d0d) {
     this.emitters.push({ obj, offset, life, color, acc: 0 });
   }
-  sparks(x, y, z) { this.particles(x, y, z, 5, 0xffd27a, 6, 0.25, 0.6, 6); }
+  sparks(x, y, z) {
+    this.particles(x,y,z,lowPower ? 3 : 5,0xd7b67d,4,0.18,0.35,8);
+    this.smoke(x,y,z,0.5,0x938a7c,lowPower ? 2 : 3);
+  }
+  smoke(x,y,z,size,color,count = 5) {
+    for(let i=0;i<count;i++){
+      // A nuvem tem orçamento próprio para manter rajadas leves no celular.
+      if(this.fx.filter(f=>f.kind==='smoke').length >= (lowPower ? 24 : 56)) break;
+      const material = new THREE.SpriteMaterial({map:smokeMap(),color,transparent:true,depthWrite:false,opacity:0,rotation:Math.random()*Math.PI*2});
+      const mesh = new THREE.Sprite(material);
+      mesh.position.set(x+(Math.random()-0.5)*size,y,z+(Math.random()-0.5)*size);
+      mesh.scale.setScalar(size*0.45); this.scene.add(mesh);
+      this.fx.push({mesh,t:0,life:1.1+Math.random()*0.7,kind:'smoke',size,base:0.85,
+        vx:(Math.random()-0.5)*size*0.8,vz:(Math.random()-0.5)*size*0.8,ownMat:true});
+    }
+  }
 
   tracer(x1, y, z1, x2, z2, weapon = 'fuzil') {
     const dx = x2-x1, dz = z2-z1, len = Math.hypot(dx,dz);
@@ -310,9 +340,9 @@ export class Effects {
   }
 
   explosion(x, z, radius, color = 0xff7a2a) {
-    // bola de fogo em blocos: dois cubos girados (núcleo claro + casca colorida)
+    // Clarão breve, seguido de poeira e fumaça com bordas suaves.
     for (const [c, k, rot] of [[color, 1, 0], [0xffe0a0, 0.6, 0.78]]) {
-      const mesh = new THREE.Mesh(cubeGeo, basic(c, true, 0.85));
+      const mesh = new THREE.Mesh(sphereGeo, basic(c, true, 0.75));
       mesh.position.set(x, 0.7, z);
       mesh.rotation.set(rot, rot * 0.7 + Math.random(), rot * 0.4);
       mesh.scale.setScalar(0.3 * k);
@@ -324,7 +354,7 @@ export class Effects {
     this.shock(x, z, radius, color);
     this.particles(x, 0.6, z, 16, 0x3a3a3a, 7, 0.9, 2.2, 6); // entulho
     this.particles(x, 0.6, z, 14, color, 9, 0.4, 1.4, 4); // fagulhas
-    this.particles(x, 0.9, z, 10, 0x4a4642, 1.6, 1.6, 3.6, -1.2); // fumaça em cubos subindo devagar
+    this.smoke(x,0.9,z,radius*0.8,0x58534b,lowPower ? 5 : 9);
     this.flash.position.set(x, 2.5, z);
     this.flash.color.setHex(color);
     this.flash.intensity = 40;
@@ -410,7 +440,12 @@ export class Effects {
       const f = this.fx[i];
       f.t += dt;
       const k = Math.min(1, f.t / f.life);
-      if (f.kind === 'round') {
+      if (f.kind === 'smoke') {
+        f.mesh.position.x += f.vx*dt; f.mesh.position.z += f.vz*dt;
+        f.mesh.position.y += dt*f.size*0.35;
+        f.mesh.scale.setScalar(f.size*(0.45+1.25*k));
+        f.mesh.material.opacity = f.base*Math.min(1,k*8)*(1-k);
+      } else if (f.kind === 'round') {
         f.mesh.position.x = f.x+f.dx*k; f.mesh.position.z = f.z+f.dz*k;
         f.mesh.children[0].visible = true;
       } else if (f.kind === 'fade') {

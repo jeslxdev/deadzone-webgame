@@ -447,6 +447,15 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
         addPlain(w, h, d, cx, h / 2, cz, wall, { collide: true });
         // janelas e porta
         const front = j === 0 ? -1 : 1;
+        // Degrau e cobertura da entrada ficam dentro do terreno da casa.
+        const doorZ = cz+front*(d/2+0.45);
+        addPlain(1.8,0.18,0.85,cx,0.09,doorZ,0x858075,{collide:true});
+        addPlain(2.0,0.12,1.0,cx,2.65,doorZ,0x575347);
+        for(const side of [-1,1]){
+          addPlain(0.08,2.55,0.08,cx+side*0.9,1.28,doorZ+front*0.35,0x676353);
+          addPlain(0.12,0.9,0.06,cx+side*(w/4+0.4)-0.66,1.8,cz+front*(d/2+0.08),0x6a7159);
+          addPlain(1.45,0.09,0.18,cx+side*(w/4+0.4),1.30,cz+front*(d/2+0.09),0xa59b85);
+        }
         addPlain(1.1, 2, 0.08, cx, 1, cz + front * (d / 2 + 0.02), 0x3a2414, { jitter: 0 });
         addPlain(1.2, 0.9, 0.08, cx - w / 4 - 0.4, 1.8, cz + front * (d / 2 + 0.02), 0x101418, { jitter: 0 });
         addPlain(1.2, 0.9, 0.08, cx + w / 4 + 0.4, 1.8, cz + front * (d / 2 + 0.02), 0x101418, { jitter: 0 });
@@ -472,7 +481,23 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
         if (r() < 0.15) continue;
         const cx = x0 + 4.5 + k * 8.5, cz = z0 + 5.5 + row * 14;
         const stack = randi(1, 3, r);
-        for (let s = 0; s < stack; s++) addPlain(6, 2.6, 2.5, cx, 1.3 + s * 2.6, cz + (s % 2) * 0.1, pick(colors, r), { jitter: 0.12 });
+        for (let s = 0; s < stack; s++) {
+          const color = pick(colors, r), y = 1.3 + s * 2.6, z = cz + (s % 2) * 0.1;
+          addPlain(6, 2.6, 2.5, cx, y, z, color, { jitter: 0.08 });
+          const steel = darkerHex(color);
+          for (const side of [-1,1]) {
+            addPlain(6.05,0.12,0.08,cx,y-1.2,z+side*1.28,steel);
+            addPlain(6.05,0.12,0.08,cx,y+1.2,z+side*1.28,steel);
+            const ribs = lowPower ? 5 : 9;
+            for(let rib=0;rib<ribs;rib++) addPlain(0.07,2.22,0.08,cx-2.6+rib*5.2/(ribs-1),y,z+side*1.28,steel,{jitter:0.03});
+          }
+          // Portas duplas, dobradiças e travas no extremo do contêiner.
+          for(const door of [-1,1]) {
+            addPlain(0.07,2.22,1.08,cx+3.045,y,z+door*0.59,steel,{jitter:0});
+            addPlain(0.09,2.1,0.045,cx+3.09,y,z+door*0.72,0xa6a293,{jitter:0});
+            addPlain(0.12,0.09,0.28,cx+3.14,y-0.25,z+door*0.72,0x777567,{jitter:0});
+          }
+        }
         addCollider(cx - 3, cz - 1.3, cx + 3, cz + 1.3, stack * 2.6);
         if (r() < 0.4) addPlain(6, 2.6, 2.5, cx, 1.3, cz + 3.2, pick(colors, r), { collide: true });
       }
@@ -483,12 +508,25 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
       const cx = x0 + B / 2, cz = z0 + B / 2 - 2;
       addBuilding(cx, cz, 22, 13, rand(6, 9, r), pick(col.building, r));
       addPlain(6, 4.5, 0.1, cx, 2.25, cz + 6.56, 0x1a1a1a, { jitter: 0 });
+      for(let slat=0;slat<10;slat++) addPlain(5.7,0.035,0.045,cx,0.25+slat*0.42,cz+6.64,0x555e60,{jitter:0});
+      for(const side of [-1,1]) {
+        addPlain(0.28,4.9,0.3,cx+side*3.16,2.45,cz+6.65,0xb3a88c);
+        addPlain(4.2,0.35,0.8,cx+side*7.6,0.175,cz+6.7,0x777269,{collide:true});
+        for(let post=0;post<2;post++)addPlain(0.16,0.95,0.16,cx+side*(6.4+post*2.2),0.65,cz+7.03,0xd1ac47,{collide:true});
+      }
       for (let i = 0; i < 4; i++) addContainer(r() < 0.7 ? 'caixa' : 'militar', x0 + 3 + i * 6.5, z0 + B - 2.2);
     },
     bunker(x0, z0) {
       const cx = x0 + B / 2, cz = z0 + B / 2;
       addPlain(10, 3, 8, cx, 1.5, cz, 0x7a7a70, { collide: true });
       addPlain(8, 0.3, 0.1, cx, 2.2, cz + 4.02, 0x101010, { jitter: 0 });
+      addPlain(10.6,0.4,8.6,cx,3.1,cz,0x5b6258);
+      for(const side of [-1,1]) {
+        addPlain(0.5,2.8,8.3,cx+side*4.8,1.4,cz,0x656f60);
+        for(let vent=0;vent<4;vent++)addPlain(0.06,0.12,0.7,cx+side*5.07,1.2+vent*0.22,cz-1.6,0x252c28,{jitter:0});
+      }
+      addPlain(0.1,4.6,0.1,cx+2.8,5.6,cz-2.5,0x505956);
+      addPlain(2.2,0.08,0.08,cx+2.8,7.3,cz-2.5,0x858a7f);
       sandbags(x0 + 2, z0 + 3, x0 + 10, z0 + 3);
       sandbags(x0 + B - 2, z0 + 14, x0 + B - 2, z0 + B - 2);
       sandbags(x0 + 3, z0 + B - 3, x0 + 11, z0 + B - 3);
