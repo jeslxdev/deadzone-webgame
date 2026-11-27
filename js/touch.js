@@ -31,6 +31,8 @@ export class TouchControls {
     this.root = el(`<div class="touch-ui" id="touch-ui">
       <div class="t-move" id="t-move"><div class="t-base hidden"><div class="t-knob"></div></div><div class="t-hint">Arraste para andar</div></div>
       <div class="t-top">
+        <button class="t-mini" data-act="zoom-in" aria-label="Aproximar câmera">+</button>
+        <button class="t-mini" data-act="zoom-out" aria-label="Afastar câmera">−</button>
         <button class="t-mini" data-key="KeyB" aria-label="Primeira pessoa">${icon('camera')}</button>
         <button class="t-mini" data-key="Tab">${icon('mochila')}</button>
         <button class="t-mini" data-key="Escape">${icon('fechar')}</button>
@@ -106,6 +108,10 @@ export class TouchControls {
         if (act === 'attack') { this.atkPtr = e.pointerId; this.atkOrigin = [e.clientX, e.clientY]; this.aimVec = null; inp.buttons.add(0); inp.justClicked.add(0); }
         if (act === 'heavy') inp.justClicked.add(2);
         if (act === 'fs') this.fullscreen();
+        if (act === 'zoom-in' || act === 'zoom-out') {
+          this.g.mobileZoom = Math.max(0.72, Math.min(1.3, (this.g.mobileZoom || 1) + (act === 'zoom-in' ? -0.1 : 0.1)));
+          this.g.resize(innerWidth, innerHeight);
+        }
       });
       b.addEventListener('pointermove', (e) => {
         if (b.dataset.act !== 'attack' || e.pointerId !== this.atkPtr) return;

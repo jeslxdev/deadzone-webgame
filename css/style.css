@@ -491,6 +491,24 @@ body[data-touch] .hud-br { display: none; }
 /* celular: sem zoom de duplo toque (manipulation mantém rolagem) */
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 canvas#gl, canvas#overlay { touch-action: none; }
+/* Área de visão livre acima dos controles e margens para recortes da tela. */
+body[data-touch] #hud .touch-ui {
+  inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+body[data-touch] .t-mini { min-width: 40px; font-size: 24px; }
+body[data-touch] .t-top { gap: 4px; }
+body[data-touch] .t-skill.empty { display: none; }
+body[data-touch] .t-btn { background: rgba(16,13,11,0.46); }
+body[data-touch] .hud-tl { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); }
+body[data-touch] .hud-tr { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+@media (orientation: landscape) and (max-height: 460px) {
+  body[data-touch] .t-top { top: 76px; }
+  body[data-touch] .t-s3 { right: 240px; bottom: 118px; }
+  body[data-touch] .t-jump { bottom: 140px; right: 42px; }
+  body[data-touch] .t-reload { right: 20px; bottom: 92px; }
+  body[data-touch] .t-use { bottom: 90px; }
+  body[data-touch] .hud-top { max-width: 36vw; }
+}
 body[data-touch] .side-panel, body[data-touch] .modal-box, body[data-touch] .profiles, body[data-touch] .tab-body, body[data-touch] #menu .menu-center { touch-action: pan-y; }
 /* campos com fonte >= 16px evitam o zoom automático ao focar (iOS) */
 body[data-touch] input, body[data-touch] textarea, body[data-touch] select { font-size: 16px; }
@@ -564,4 +582,11 @@ body[data-touch] #menu .mm-panel { touch-action: pan-y; }
 .t-swap i { position: absolute; right: -2px; bottom: -4px; font-style: normal; font-size: 13px; font-weight: 700; color: var(--gold); text-shadow: 0 1px 2px #000; }
 @media (orientation: portrait) {
   body[data-touch] .t-swap { right: 228px; bottom: 58px; }
+}
+
+@media (orientation: portrait) {
+  body[data-touch] .hud-top { top: calc(104px + env(safe-area-inset-top, 0px)); max-width: calc(100vw - 16px); width: calc(100vw - 16px); }
+  body[data-touch] .t-top { top: 154px; }
+  body[data-touch][data-screen="game"] .feedback-launch { top: calc(204px + env(safe-area-inset-top, 0px)); left: auto; right: max(8px, env(safe-area-inset-right)); }
+  body[data-touch] .t-rotate-hint { top: 46%; max-width: 92vw; white-space: normal; font-size: 12px; }
 }

@@ -757,7 +757,7 @@ export class Game {
       bobX = Math.sin(gt.ph) * 0.06 * gt.blend * (0.45 + run);
       roll = Math.sin(gt.ph) * 0.005 * gt.blend * (0.4 + run);
     }
-    const fov = 40 + 3.5 * run + (pl.dashT > 0 ? 5 : 0) + (pl.lunge ? 4 : 0);
+    const fov = (isTouch ? 46 : 40) + (isTouch ? 1.5 : 3.5) * run + (pl.dashT > 0 ? 3 : 0) + (pl.lunge ? 3 : 0);
     if (Math.abs(c.fov - fov) > 0.01) { c.fov += (fov - c.fov) * Math.min(1, dt * 6); c.updateProjectionMatrix(); }
     c.position.set(cam.target.x + bobX, cam.dist * Math.sin(cam.pitch) + bobY, cam.target.z + cam.dist * Math.cos(cam.pitch));
     c.lookAt(cam.target.x + bobX * 0.5, 0, cam.target.z);
@@ -799,7 +799,7 @@ export class Game {
     const pl = this.player, c = this.camera;
     if (on) {
       this.fpsYaw = pl.facing; this.fpsPitch = -0.08; c.near = 0.05;
-      this.hud.toast(`${icon('camera')} Primeira pessoa · mouse olha (clique trava o cursor) · B ou rolar para trás para sair`, 'dim');
+      this.hud.toast(isTouch ? `${icon('camera')} Primeira pessoa` : `${icon('camera')} Primeira pessoa · mouse olha (clique trava o cursor) · B ou rolar para trás para sair`, 'dim');
       this.requestLook();
     } else {
       c.near = 0.5; c.fov = 40;
@@ -809,6 +809,7 @@ export class Game {
     }
     c.updateProjectionMatrix();
     // a luz de preenchimento (pensada para a câmera de cima) fica colada na lâmina em 1ª pessoa: atenua
+    if (this.touch) this.resize(innerWidth, innerHeight);
     if (this._plI === undefined) this._plI = this.playerLight.intensity;
     this.playerLight.intensity = on ? this._plI * 0.2 : this._plI;
     // a própria cabeça some (a câmera fica nos olhos) e a silhueta de raio-X é desligada
@@ -915,9 +916,14 @@ export class Game {
 
   resize(w, h) {
     this.camera.aspect = w / h;
+    if (this.touch && this.cam) {
+      const portrait = h > w;
+      this.cam.pitch = portrait ? 1.12 : 1.02;
+      this.cam.dist = (portrait ? 32 : 25) * (this.mobileZoom || 1);
+      if (!this.fps) this.camera.setViewOffset(w, h, 0, h * (portrait ? 0.10 : 0.04), w, h);
+      else this.camera.clearViewOffset();
+    }
     this.camera.updateProjectionMatrix();
-    // celular em pé: câmera mais afastada para enxergar o suficiente dos lados
-    if (this.touch && this.cam) this.cam.dist = h > w ? 40 : 27;
   }
 
   setGamePresence(active) {
