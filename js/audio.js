@@ -253,6 +253,7 @@ function fleshHit(pan = 0, heavy = false) {
   noise(o, { t, dur: 0.07, peak: 1, type: 'lowpass', f: 1200, f2: 300 });
   noise(o, { buf: pink, t, dur: 0.12, peak: 0.6, type: 'bandpass', f: rnd(350, 550), q: 4 });
   osc(o, { t, type: 'sine', f: heavy ? 110 : 150, f2: 50, dur: 0.1, peak: 0.6 });
+  noise(o, { buf: brown, t: t + 0.008, dur: heavy ? 0.12 : 0.07, peak: 0.4, type: 'lowpass', f: 420, f2: 120 });
 }
 
 // ---------- zumbis ----------
@@ -485,10 +486,11 @@ export const sfx = {
     const o = out({ gain: 0.2, rev: 0.6 });
     [392, 494, 587, 784].forEach((f, i) => { osc(o, { type: 'triangle', f, dur: 0.9, peak: 0.4, t: ctx.currentTime + i * 0.1 }); osc(o, { type: 'sine', f: f * 2, dur: 0.6, peak: 0.15, t: ctx.currentTime + i * 0.1 }); });
   },
-  hurt() {
+  hurt(fraction = 0.1) {
     if (!ctx || throttle('hurt', 260)) return;
     if (playSample('player_hurt', { gain: 0.9 })) return;
     const t = ctx.currentTime, o = out({ gain: 0.75, rev: 0.04 });
+    const impact = Math.max(0, Math.min(1, fraction * 4));
     // "uh!" curto: voz grave com ataque rápido e queda de tom
     const f = rnd(118, 135);
     const src = ctx.createOscillator(); src.type = 'sawtooth';
@@ -503,8 +505,9 @@ export const sfx = {
     mix.connect(e); e.connect(o); src.start(t); src.stop(t + 0.22);
     noise(o, { buf: pink, t, dur: 0.12, peak: 0.35, type: 'bandpass', f: 700, q: 1.5 }); // ar expulso
     // impacto (soco no corpo)
-    osc(o, { t, type: 'sine', f: 170, f2: 55, dur: 0.09, peak: 0.9 });
-    noise(o, { t, dur: 0.05, peak: 0.6, type: 'lowpass', f: 1100, f2: 300 });
+    osc(o, { t, type: 'sine', f: 170 - impact * 35, f2: 55, dur: 0.09 + impact * 0.04, peak: 0.55 + impact * 0.35 });
+    noise(o, { t, dur: 0.05, peak: 0.45 + impact * 0.2, type: 'lowpass', f: 1100, f2: 300 });
+    noise(o, { buf: brown, t: t + 0.006, dur: 0.06 + impact * 0.05, peak: 0.25 + impact * 0.3, type: 'lowpass', f: 360, f2: 110 });
   },
   reload() { if (!ctx) return; const t = ctx.currentTime; mech(t, 0, 0.5, 1900); mech(t + 0.18, 0, 0.4, 2600); mech(t + 0.36, 0, 0.6, 1500); },
   empty() { if (!ctx || throttle('empty', 200)) return; mech(ctx.currentTime, 0, 0.5, 3200); },

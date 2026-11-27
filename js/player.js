@@ -90,7 +90,7 @@ export class Player {
     this.game.effects.blood(this.pos.x, 1.2, this.pos.z, 6);
     this.game.effects.number(this.pos.x, 2.3, this.pos.z, Math.round(amount), '#ff5050', 18);
     this.game.hud.hurt();
-    sfx.hurt();
+    sfx.hurt(amount / Math.max(1, this.stats.maxHp));
     if (this.hp <= 0) { this.hp = 0; this.dead = true; this.game.onPlayerDeath(); }
   }
 
