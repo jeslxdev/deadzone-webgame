@@ -40,7 +40,7 @@ td:first-child { font-family: var(--f-mono); white-space: nowrap; }
 <main>
   <header style="display:grid;gap:12px">
     <h1>Skin Deadzone</h1>
-    <p class="lede">Como a textura 64×64 vira o corpo em blocos do jogo — para pintar a sua skin ou entender as skins geradas dos sobreviventes e zumbis.</p>
+    <p class="lede">Como a textura 64×64 vira o corpo em blocos do jogo — para pintar a sua skin ou entender as skins geradas dos sobreviventes e zumbis. No fim, a planta da base dos sobreviventes.</p>
   </header>
 
   <section>
@@ -188,5 +188,82 @@ td:first-child { font-family: var(--f-mono); white-space: nowrap; }
       </tbody>
     </table>
     </div>
+  </section>
+  <section>
+    <h2>Base dos sobreviventes — planta</h2>
+    <figure>
+      <div class="legend">
+        <span><i class="sw" style="background:currentColor;opacity:.28;border:1px solid currentColor"></i>tem colisão (bloqueia)</span>
+        <span><i class="sw" style="border:1.5px dashed currentColor"></i>passa por cima / por baixo</span>
+        <span><i class="sw" style="background:var(--accent)"></i>entradas e extração</span>
+      </div>
+      <div class="scroll">
+      <svg viewBox="0 0 720 770" role="img" aria-label="Planta da base de 21 por 21 metros vista de cima: muro com entradas ao sul e a leste, torres nos dois cantos do fundo, barracas com a porta virada para a fogueira central onde o jogador nasce, caminhão militar à esquerda com o ponto de extração ao lado, passarela do portão sul até a fogueira, suprimentos no canto sudeste.">
+        <defs>
+          <pattern id="m1" width="28" height="28" patternUnits="userSpaceOnUse" x="36" y="36"><path d="M28 0H0V28" fill="none" stroke="currentColor" stroke-opacity=".07"/></pattern>
+          <marker id="in" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker>
+        </defs>
+        <text x="330" y="16" font-family="IBM Plex Sans, sans-serif" font-size="12" fill="currentColor" fill-opacity=".7" text-anchor="middle">muro: barreira de concreto + 2 fiadas de sacos + arame farpado (1,8 m)</text>
+        <g transform="translate(0,30)">
+          <rect x="36" y="36" width="588" height="588" fill="url(#m1)"/>
+          <!-- muro com os vãos dos portões (sul e leste: 5 m) -->
+          <g stroke="currentColor" stroke-opacity=".55" stroke-width="22" stroke-linecap="square" fill="none">
+            <path d="M36 36H624M36 36V624M36 624H260M400 624H624M624 36V260M624 400V624"/>
+          </g>
+          <!-- sólidos (com colisão) -->
+          <g fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-opacity=".75" stroke-width="1.2">
+            <rect x="44.4" y="44.4" width="72.8" height="72.8"/><rect x="542.8" y="44.4" width="72.8" height="72.8"/>
+            <rect x="117.2" y="136.8" width="112" height="95.2"/><rect x="430.8" y="136.8" width="112" height="95.2"/>
+            <rect x="107.4" y="331.4" width="81.2" height="236.6"/><rect x="107.4" y="505.8" width="81.2" height="54.6" fill-opacity=".35"/>
+            <rect x="222.2" y="514.8" width="19.6" height="72.8"/><rect x="197" y="499.4" width="44.8" height="19.6"/>
+            <rect x="418.2" y="514.8" width="19.6" height="72.8"/><rect x="418.2" y="499.4" width="44.8" height="19.6"/>
+            <rect x="527.4" y="433.6" width="78.4" height="57.4"/><rect x="556.8" y="502.2" width="44.8" height="25.2"/><rect x="527.4" y="555.4" width="40.6" height="42"/>
+            <rect x="565.2" y="157.8" width="33.6" height="30.8"/><rect x="565.2" y="197" width="33.6" height="30.8"/>
+            <rect x="54.2" y="268.4" width="33.6" height="33.6"/>
+            <rect x="248.8" y="83.6" width="33.6" height="22.4"/><rect x="374.8" y="82.2" width="50.4" height="25.2"/>
+            <circle cx="330" cy="69.6" r="4"/>
+            <circle cx="234.8" cy="248.8" r="4"/><circle cx="425.2" cy="248.8" r="4"/><circle cx="425.2" cy="439.2" r="4"/><circle cx="243.2" cy="450.4" r="4"/>
+          </g>
+          <!-- por cima / por baixo: passarela, varal de lâmpadas, cabo do gerador, bancos de tronco -->
+          <g fill="none" stroke="currentColor" stroke-opacity=".6" stroke-width="1.2" stroke-dasharray="4 3">
+            <rect x="313.2" y="402.8" width="33.6" height="210"/>
+            <path d="M234.8 248.8L425.2 248.8L425.2 439.2L243.2 450.4Z M234.8 248.8L425.2 439.2"/>
+            <path d="M265.6 106L234.8 248.8"/>
+          </g>
+          <g stroke="currentColor" stroke-opacity=".6" stroke-width="7" stroke-linecap="round">
+            <path d="M386 290L398 325M287 400L330 384M262 283L280 318"/>
+          </g>
+          <!-- fogueira e nascimento -->
+          <circle cx="330" cy="330" r="16" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="330" cy="330" r="6" fill="currentColor"/>
+          <!-- portas das barracas voltadas para a fogueira -->
+          <g stroke="currentColor" stroke-width="3"><path d="M229.2 170V198M430.8 170V198"/></g>
+          <!-- extração ao lado do caminhão + entradas -->
+          <circle cx="209.6" cy="414" r="13" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+          <g stroke="var(--accent)" stroke-width="2.5" marker-end="url(#in)">
+            <line x1="330" y1="712" x2="330" y2="646"/><line x1="700" y1="330" x2="646" y2="330"/>
+          </g>
+          <!-- rótulos -->
+          <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="currentColor" text-anchor="middle">
+            <text x="80.8" y="134">torre</text><text x="579.2" y="134">torre</text>
+            <text x="173.2" y="188">barraca</text><text x="486.8" y="188">barraca</text>
+            <text x="148" y="450" transform="rotate(-90 148 450)">caminhão</text><text x="148" y="537" font-size="11">cabine</text>
+            <text x="209.6" y="392" fill="var(--accent)">extração</text>
+            <text x="330" y="364">fogueira · nascimento</text>
+            <text x="330" y="240">varal de lâmpadas</text>
+            <text x="566.6" y="425">suprimentos</text>
+            <text x="582" y="150">paletes</text>
+            <text x="71" y="318">água</text>
+            <text x="265.6" y="124">gerador</text><text x="400" y="124">rádio</text>
+            <text x="348" y="74" text-anchor="start">bandeira</text>
+            <text x="360" y="560" text-anchor="start">passarela</text>
+            <text x="444" y="548" text-anchor="start">sacos</text>
+            <text x="330" y="735" fill="var(--accent)">entrada sul · placa ZONA SEGURA</text>
+            <text x="690" y="316" fill="var(--accent)" text-anchor="end">entrada leste · cancela</text>
+          </g>
+        </g>
+      </svg>
+      </div>
+      <figcaption>Vista de cima, 1 quadrado = 1 m (base de 21 × 21 m). O jogador nasce na fogueira e sai pelos vãos de 5 m ao sul e a leste; a extração fica ao lado do caminhão, a 4 m da fogueira. Blocos cheios têm colisão e entram na navegação dos zumbis. O tracejado não bloqueia: a passarela tem 6 cm (sobe andando) e o varal e o cabo passam a mais de 2,8 m de altura. Os sacos de areia da trincheira têm 0,84 m: dá para subir com um pulo.</figcaption>
+    </figure>
   </section>
 </main>
