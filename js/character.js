@@ -1144,7 +1144,9 @@ function bladeGeo(len, width, curve) {
   const vertices = [], indices = [], sections = 16;
   for (let i = 0; i <= sections; i++) {
     const t = i / sections, cx = curve * t * t;
-    const half = Math.max(0.0008, width * 0.5 * Math.pow(1 - t, 0.65));
+    // Largura quase constante até a ponta, como uma lâmina forjada.
+    const tip = t < 0.82 ? 1 - t * 0.1 : Math.max(0.015, (1 - t) / 0.18 * 0.918);
+    const half = width * 0.5 * tip;
     const thick = Math.max(0.001, 0.012 * (1 - t));
     const y = -len * t;
     vertices.push(cx - half, y, 0, cx, y, thick, cx + half, y, 0, cx, y, -thick);
@@ -1159,6 +1161,23 @@ function bladeGeo(len, width, curve) {
   g.computeVertexNormals();
   bladeGeoCache.set(k, g);
   return g;
+}
+
+function bladeFuller(len, curve) {
+  const key = 'fuller_' + len + '_' + curve;
+  if (bladeGeoCache.has(key)) return bladeGeoCache.get(key);
+  const points = [], indices = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = 0.09 + (i / 12) * 0.69, x = curve * t * t, y = -len * t;
+    const z = 0.012 * (1 - t) + 0.001;
+    points.push(x - 0.004, y, z, x + 0.004, y, z);
+    if (i < 12) { const n = i * 2; indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  bladeGeoCache.set(key, geo);
+  return geo;
 }
 
 export function buildWeapon(baseId, rarity = 0) {
@@ -1256,7 +1275,9 @@ export function buildWeapon(baseId, rarity = 0) {
       g.add(wm(S, gold, 0, 0.12, 0, 0, 0, 0, 0.032, 0.022, 0.032));
       g.add(wm(C, gold, 0, -0.155, 0, 0, 0, 0, 0.053, 0.014, 0.048));
       const curve = b.wide ? 0.02 : baseId === 'faca' ? 0.01 : 0.05 * L;
-      g.add(wm(bladeGeo(L, b.wide ? 0.13 : 0.05, curve), bladeMat, 0, -0.165, 0));
+      g.add(wm(bladeGeo(L, b.wide ? 0.13 : 0.075, curve), bladeMat, 0, -0.165, 0));
+      const fuller = wmat('bladeFuller', () => mat(0x7f8c92, { metalness: 0.8, roughness: 0.4, side: THREE.DoubleSide }));
+      g.add(wm(bladeFuller(L, curve), fuller, 0, -0.165, 0));
       // Espinha e canal de alívio distinguem a lâmina do cabo e da guarda.
       const steelEdge = wmat('steelEdge', () => mat(0xf6f7f4, { metalness: 0.95, roughness: 0.13 }));
       g.add(wm(box(0.003, L * 0.5, 0.002), steelEdge, b.wide ? -0.035 : -0.013, -0.22 - L * 0.25, 0.004, 0, 0, -curve * 0.1));
@@ -1273,6 +1294,10 @@ export function buildWeapon(baseId, rarity = 0) {
           band.rotation.z = i % 2 ? 0.3 : -0.3; g.add(band);
         }
         g.add(wm(C, metal2, 0, -0.34, 0, 0, 0, 0, 0.035, 0.018, 0.035));
+        // Reforço junto à guarda e losangos claros no trançado do cabo.
+        g.add(wm(C, gold, 0, -0.19, 0, 0, 0, 0, 0.038, 0.05, 0.038));
+        const cord = wmat('katanaCord', () => mat(0xd3c6aa, { roughness: 0.9 }));
+        for (let i = 0; i < 4; i++) g.add(wm(box(0.021, 0.018, 0.006), cord, 0, 0.04 - i * 0.042, 0.03, 0, 0, Math.PI / 4));
       } else if (baseId !== 'faca') {
         const spine = wm(C, metal2, 0, -Math.max(0.35, L * 0.56), 0.021, 0, 0, 0, 0.009, L * 0.62, 0.008);
         g.add(spine);

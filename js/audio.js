@@ -383,24 +383,12 @@ function boom(big = 1, pan = 0) {
 // ---------- corte de lâmina em carne ----------
 function slice(heavy = false, pan = 0) {
   const t = ctx.currentTime;
-  const o = out({ gain: heavy ? 1.0 : 0.8, pan, rev: 0.07 });
-  // lâmina entrando (rasgo agudo descendo)
-  noise(o, { t, dur: 0.07, peak: 0.9, type: 'bandpass', f: 5200, f2: 1300, q: 1.3 });
-  // tecido molhado rasgando: ruído com modulação áspera
-  const s0 = ctx.createBufferSource(); s0.buffer = pink;
-  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.5;
-  bp.frequency.setValueAtTime(1300, t); bp.frequency.exponentialRampToValueAtTime(450, t + 0.2);
-  const am = ctx.createGain(); am.gain.value = 0.5;
-  const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = rnd(45, 70);
-  const lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain);
-  const e = ctx.createGain(); env(e, t + 0.01, 0.01, 1.4, heavy ? 0.24 : 0.17);
-  s0.connect(bp); bp.connect(am); am.connect(e); e.connect(o);
-  s0.start(t, Math.random() * 2); s0.stop(t + 0.35); lfo.start(t); lfo.stop(t + 0.35);
-  // "squelch" ressonante (sangue espirrando)
-  noise(o, { buf: pink, t: t + 0.02, dur: 0.16, peak: 0.9, type: 'lowpass', f: 1000, f2: 220, q: 9 });
-  // impacto no corpo
-  osc(o, { t, type: 'sine', f: heavy ? 105 : 135, f2: 48, dur: 0.11, peak: heavy ? 0.85 : 0.55 });
-  if (heavy) for (let i = 0; i < 3; i++) noise(o, { t: t + 0.015 + i * rnd(0.012, 0.025), dur: 0.018, peak: 0.6, type: 'bandpass', f: rnd(1400, 2600), q: 9 }); // osso
+  const o = out({ gain: heavy ? 0.85 : 0.68, pan, rev: 0.035 });
+  // Ataque da lâmina, impacto abafado e rasgo curto com variação.
+  noise(o, { t, dur: 0.025, peak: 0.9, type: 'bandpass', f: rnd(2400, 3400), f2: 950, q: 0.9 });
+  noise(o, { buf: brown, t: t + 0.004, dur: heavy ? 0.14 : 0.09, peak: heavy ? 1 : 0.7, type: 'lowpass', f: 620, f2: 170 });
+  noise(o, { buf: pink, t: t + 0.012, dur: heavy ? 0.14 : 0.09, peak: 0.65, type: 'bandpass', f: rnd(800, 1200), f2: 330, q: 1.5 });
+  osc(o, { t, type: 'sine', f: heavy ? 115 : 150, f2: 55, dur: 0.075, peak: heavy ? 0.65 : 0.4 });
 }
 function spurt(pan = 0) {
   const t = ctx.currentTime, o = out({ gain: 0.35, pan, rev: 0.1 });
@@ -491,19 +479,8 @@ export const sfx = {
     if (playSample('player_hurt', { gain: 0.9 })) return;
     const t = ctx.currentTime, o = out({ gain: 0.75, rev: 0.04 });
     const impact = Math.max(0, Math.min(1, fraction * 4));
-    // "uh!" curto: voz grave com ataque rápido e queda de tom
-    const f = rnd(118, 135);
-    const src = ctx.createOscillator(); src.type = 'sawtooth';
-    src.frequency.setValueAtTime(f * 1.12, t); src.frequency.exponentialRampToValueAtTime(f * 0.8, t + 0.16);
-    const mix = ctx.createGain();
-    for (const [ff, q, gg] of [[420, 5, 1.6], [900, 7, 0.8], [2400, 9, 0.18]]) {
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = ff; bp.Q.value = q;
-      const g = ctx.createGain(); g.gain.value = gg; src.connect(bp); bp.connect(g); g.connect(mix);
-    }
-    const e = ctx.createGain(); e.gain.setValueAtTime(0.0001, t); e.gain.linearRampToValueAtTime(1, t + 0.012);
-    e.gain.setValueAtTime(1, t + 0.06); e.gain.exponentialRampToValueAtTime(0.0001, t + 0.19);
-    mix.connect(e); e.connect(o); src.start(t); src.stop(t + 0.22);
-    noise(o, { buf: pink, t, dur: 0.12, peak: 0.35, type: 'bandpass', f: 700, q: 1.5 }); // ar expulso
+    // Respiração curta, distinta da voz áspera dos zumbis.
+    noise(o, { buf: pink, t: t + 0.025, dur: 0.16, a: 0.012, peak: 0.5, type: 'bandpass', f: rnd(950, 1250), f2: 500, q: 0.8 });
     // impacto (soco no corpo)
     osc(o, { t, type: 'sine', f: 170 - impact * 35, f2: 55, dur: 0.09 + impact * 0.04, peak: 0.55 + impact * 0.35 });
     noise(o, { t, dur: 0.05, peak: 0.45 + impact * 0.2, type: 'lowpass', f: 1100, f2: 300 });
@@ -578,7 +555,7 @@ export function startAmbience(kind) {
   lfo(hiss.g.gain, 0.09, 0.02, 0.03);
 
   // drone de tensão
-  if (kind !== 'camp') {
+  if (kind === 'menu') {
     const dg = ctx.createGain(); dg.gain.value = 0.045;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260;
     lp.connect(dg); dg.connect(bus);
@@ -613,7 +590,6 @@ export function startAmbience(kind) {
     schedule(() => groanFar(far(0.08)), 12, 25);
     schedule(() => owl(far(0.12)), 15, 30);
   } else {
-    schedule(() => groanFar(far(0.2)), 4, 10);
     schedule(() => crow(far(0.14)), 9, 20);
     schedule(() => creak(far(0.12)), 10, 22);
     schedule(() => distantShot(far(0.18)), 18, 40);
@@ -709,11 +685,14 @@ export function startMusic(mood = 'camp') {
 }
 export function setMusicIntensity(v) { if (music) music.intensity += (Math.max(0, Math.min(1, v)) - music.intensity) * 0.05; }
 export function stopMusic() {
-  if (!music || !ctx) { pendingMusic = null; return; }
+  pendingMusic = null;
+  if (!music || !ctx) return;
   const m = music; music = null;
   clearInterval(m.timer);
-  m.bus.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
-  setTimeout(() => m.bus.disconnect(), 3000);
+  m.bus.gain.cancelScheduledValues(ctx.currentTime);
+  m.bus.gain.setValueAtTime(m.bus.gain.value, ctx.currentTime);
+  m.bus.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.08);
+  setTimeout(() => m.bus.disconnect(), 200);
 }
 function scheduleBeat(b, t, spb) {
   const m = music, inten = m.mood === 'game' ? m.intensity : 0;
@@ -735,7 +714,6 @@ function scheduleBeat(b, t, spb) {
     const n = chord[(Math.random() * 3) | 0] + (Math.random() < 0.5 ? 12 : 0);
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = mtof(n);
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + spb * 2.5);
-    const s2 = ctx.createGain(); s2.gain.value = 0.4; g.connect(s2); s2.connect(reverbIn);
     o.connect(g); g.connect(m.bus); o.start(t); o.stop(t + spb * 3);
   }
   // percussão: pulso de coração em exploração, tambores no combate

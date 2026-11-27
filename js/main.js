@@ -15,7 +15,7 @@ import { icon } from './icons.js';
 import { toast } from './ui.js';
 import { loadModels } from './models.js';
 import { isTouch, lowPower } from './device.js';
-import { initAudio, startAmbience, startMusic } from './audio.js';
+import { initAudio, startAmbience, startMusic, stopMusic } from './audio.js';
 import { createPost } from './post.js';
 
 const canvas = document.getElementById('gl');
@@ -72,7 +72,8 @@ const app = {
     }
     if (name === 'game') this.screen = new Game(this, this.profile, args.map, { seed: args.seed, coop: args.coop });
     startAmbience(name === 'game' ? args.map.theme : name === 'creator' ? 'menu' : 'camp');
-    startMusic(name === 'game' ? 'game' : 'camp');
+    if (name === 'game') stopMusic();
+    else startMusic('camp');
   },
   // Inicia uma partida. Com o servidor ativo, cria uma sala co-op (você é o anfitrião).
   async startGame(map, opts = {}) {
