@@ -91,7 +91,6 @@ export class Game {
     this.ambientT = 10;
     this.hordeT = rand(60, 90);
     this.autosaveT = 30;
-    this.shakeAmt = 0;
 
     this.cam = { target: this.player.pos.clone(), dist: isTouch ? 27 : 34, pitch: 0.98, locked: true };
     this.fps = false; this.fpsYaw = 0; this.fpsPitch = 0; // visão em 1ª pessoa (tecla B / rolar até o fim)
@@ -334,7 +333,7 @@ export class Game {
     }
   }
 
-  shake(a) { this.shakeAmt = Math.max(this.shakeAmt, a); }
+  shake() {}
   // combo: cada acerto soma; dano extra de até +30%; zera após 2,5s sem acertar
   addCombo() { const c = this.combo; c.n++; c.t = 2.5; if (c.n > c.best) c.best = c.n; }
   comboMult() { return 1 + Math.min(0.3, this.combo.n * 0.01); }
@@ -722,14 +721,11 @@ export class Game {
     const inp = this.input, cam = this.cam, p = this.player.pos;
     if (inp.pressed('KeyY')) { cam.locked = !cam.locked; this.hud.toast(cam.locked ? `${icon('camera')} Câmera travada no personagem` : `${icon('camera')} Câmera livre (mouse nas bordas / setas)`, 'dim'); }
     if (inp.key('KeyC')) cam.target.lerp(p, 0.3);
-    const pl = this.player, vx = pl.vel.x, vz = pl.vel.z;
+    const pl = this.player;
     if (cam.locked) {
-      // segue com leve atraso e antecipa movimento e mira (estilo câmera de ação)
-      const lead = setting('camLead');
-      const ax = lead ? clamp((inp.aim.x - p.x) * 0.16, -3.2, 3.2) : 0, az = lead ? clamp((inp.aim.z - p.z) * 0.16, -2.6, 2.6) : 0;
-      const lx = lead ? clamp(vx * 0.3, -2.4, 2.4) : 0, lz = lead ? clamp(vz * 0.3, -2.4, 2.4) : 0;
+      // Segue a posição sem deslocamentos adicionais provocados pela mira.
       cam.goal = cam.goal || new THREE.Vector3();
-      cam.goal.set(p.x + ax + lx, 0, p.z + az + lz);
+      cam.goal.set(p.x, 0, p.z);
       cam.target.lerp(cam.goal, 1 - Math.exp(-dt * 5.5));
     }
     else {
@@ -749,25 +745,10 @@ export class Game {
     }
     if (this.fps) { this.updateFpsCamera(dt); return; }
     const c = this.camera;
-    // balanço ao andar/correr + leve rolagem + FOV maior em corrida/esquiva
-    const run = clamp(Math.hypot(vx, vz) / 8, 0, 1), gt = pl.gait;
-    let bobY = 0, bobX = 0, roll = 0;
-    if (setting('camBob') && !pl.dead) {
-      bobY = Math.sin(gt.ph * 2) * 0.09 * gt.blend * (0.45 + run);
-      bobX = Math.sin(gt.ph) * 0.06 * gt.blend * (0.45 + run);
-      roll = Math.sin(gt.ph) * 0.005 * gt.blend * (0.4 + run);
-    }
-    const fov = (isTouch ? 46 : 40) + (isTouch ? 1.5 : 3.5) * run + (pl.dashT > 0 ? 3 : 0) + (pl.lunge ? 3 : 0);
-    if (Math.abs(c.fov - fov) > 0.01) { c.fov += (fov - c.fov) * Math.min(1, dt * 6); c.updateProjectionMatrix(); }
-    c.position.set(cam.target.x + bobX, cam.dist * Math.sin(cam.pitch) + bobY, cam.target.z + cam.dist * Math.cos(cam.pitch));
-    c.lookAt(cam.target.x + bobX * 0.5, 0, cam.target.z);
-    if (roll) c.rotateZ(roll);
-    if (!setting('shake')) this.shakeAmt = 0;
-    if (this.shakeAmt > 0.001) {
-      c.position.x += (Math.random() - 0.5) * this.shakeAmt;
-      c.position.y += (Math.random() - 0.5) * this.shakeAmt;
-      this.shakeAmt *= Math.exp(-dt * 7);
-    }
+    const fov = isTouch ? 46 : 40;
+    if (c.fov !== fov) { c.fov = fov; c.updateProjectionMatrix(); }
+    c.position.set(cam.target.x,cam.dist*Math.sin(cam.pitch),cam.target.z+cam.dist*Math.cos(cam.pitch));
+    c.lookAt(cam.target.x,0,cam.target.z);
     this.sun.position.set(p.x - 22, 45, p.z + 18);
     this.sun.target.position.set(p.x, 0, p.z);
     this.playerLight.position.set(p.x, 3.2, p.z + 0.5);
@@ -839,15 +820,10 @@ export class Game {
     }
     const fx = Math.sin(this.fpsYaw), fz = Math.cos(this.fpsYaw), cp = Math.cos(this.fpsPitch);
     if (!this.touch) { inp.aim.x = p.x + fx * 14; inp.aim.z = p.z + fz * 14; }
-    const head = this._headPos || (this._headPos = new THREE.Vector3());
-    pl.rig.head.getWorldPosition(head);
-    c.position.set(head.x + fx * 0.24, head.y + 0.17, head.z + fz * 0.24); // à frente do rosto: ombros e tronco ficam atrás da câmera
-    c.lookAt(c.position.x + fx * cp, c.position.y + Math.sin(this.fpsPitch), c.position.z + fz * cp);
-    const run = clamp(Math.hypot(pl.vel.x, pl.vel.z) / 8, 0, 1);
-    const fov = 72 + 4 * run + (pl.dashT > 0 ? 6 : 0);
-    if (Math.abs(c.fov - fov) > 0.01) { c.fov += (fov - c.fov) * Math.min(1, dt * 6); c.updateProjectionMatrix(); }
-    if (!setting('shake')) this.shakeAmt = 0;
-    if (this.shakeAmt > 0.001) { c.rotateX((Math.random() - 0.5) * this.shakeAmt * 0.05); c.rotateY((Math.random() - 0.5) * this.shakeAmt * 0.05); this.shakeAmt *= Math.exp(-dt * 7); }
+    const eyeHeight = (pl.rig.height || 1.85) * 0.91;
+    c.position.set(p.x+fx*0.24, pl.y+(pl.leapY || 0)+eyeHeight, p.z+fz*0.24);
+    c.lookAt(c.position.x+fx*cp,c.position.y+Math.sin(this.fpsPitch),c.position.z+fz*cp);
+    if(c.fov !== 72){c.fov=72;c.updateProjectionMatrix();}
     this.sun.position.set(p.x - 22, 45, p.z + 18);
     this.sun.target.position.set(p.x, 0, p.z);
     this.playerLight.position.set(p.x, 3.2, p.z + 0.5);

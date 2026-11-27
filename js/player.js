@@ -217,7 +217,7 @@ export class Player {
       if (k >= 1) {
         this.leap = null; this.leapY = 0;
         g.world.collide(this.pos, this.radius);
-        this.y = 0; this.vy = 0; this.airborne = false;
+        this.y = 0; this.vy = 0; this.airborne = false; this.jumps = 0;
         areaHit(this, { x: this.pos.x, z: this.pos.z, r: L.r, base: L.dmg, melee: true, knock: 12, stun: 1.6, heavy: true });
         g.effects.shock(this.pos.x, this.pos.z, L.r, 0xffb060); g.effects.shock(this.pos.x, this.pos.z, L.r * 0.6, 0xffffff);
         g.effects.particles(this.pos.x, 0.3, this.pos.z, 26, 0x5a5048, 9, 0.8, 1.8);
@@ -225,12 +225,16 @@ export class Player {
       }
     } else {
       this.leapY = 0;
-      this.pos.x += (mx * speed + this.kx) * dt;
-      this.pos.z += (mz * speed + this.kz) * dt;
+      const dx = (mx*speed+this.kx)*dt, dz=(mz*speed+this.kz)*dt;
+      const steps = Math.max(1,Math.ceil(Math.hypot(dx,dz)/(this.radius*0.45)),Math.ceil(dt*120));
+      for(let step=0;step<steps;step++){
+        this.pos.x += dx/steps; this.pos.z += dz/steps;
+        this.verticalStep(dt/steps);
+      }
     }
     const kd = Math.exp(-dt * 9);
     this.kx *= kd; this.kz *= kd;
-    if (!this.leap) this.verticalStep(dt);
+
     if (dt > 0) this.vel.set((this.pos.x - this._prev.x) / dt, 0, (this.pos.z - this._prev.z) / dt);
     this._prev.copy(this.pos);
 
@@ -321,13 +325,17 @@ export class Player {
   // Gravidade, pouso e apoio sobre objetos (carros, caixas, muretas...)
   verticalStep(dt) {
     const g = this.game, w = g.world;
-    w.collide(this.pos, this.radius, this.y); // objetos abaixo dos pés não bloqueiam
+    // Pequenos degraus são transpostos caminhando, superfícies altas exigem salto.
+    const step = !this.airborne ? w.supportHeight(this.pos.x,this.pos.z,this.radius,this.y+0.24) : this.y;
+    w.collide(this.pos,this.radius,Math.max(this.y,step));
+    if(!this.airborne && step>this.y) this.y=step;
     const sup = (this.support = w.supportHeight(this.pos.x, this.pos.z, this.radius, this.y));
     if (this.airborne || this.y > sup + 0.001) {
       if (!this.airborne) { this.airborne = true; this.airT = 0; this.vy = 0; } // saiu da borda: cai
       this.airT += dt;
-      this.vy -= GRAV * (this.plunge ? 2.6 : 1) * dt;
-      this.y += this.vy * dt;
+      const gravity = GRAV*(this.plunge ? 2.6 : 1);
+      this.y += this.vy*dt-gravity*dt*dt*0.5;
+      this.vy -= gravity*dt;
       if (this.y <= sup) {
         const fall = -this.vy;
         this.y = sup; this.vy = 0; this.airborne = false; this.jumps = 0;

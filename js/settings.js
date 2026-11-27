@@ -7,7 +7,7 @@ import { el } from './util.js';
 import { lowPower } from './device.js';
 
 const KEY = 'zonamorta.settings';
-const defaults = { camBob: true, camLead: true, shake: true, showHelp: true, seeThrough: true, cinema: !lowPower };
+const defaults = { showHelp: true, seeThrough: true, cinema: !lowPower };
 const state = Object.assign({}, defaults, JSON.parse(localStorage.getItem(KEY) || '{}'));
 export function setting(k) { return state[k]; }
 function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -28,9 +28,6 @@ export function openSettings(onClose) {
       ${slider('sfx', 'Efeitos (tiros, golpes, zumbis)', 'samurai')}
       ${slider('amb', 'Ambiente (vento, sons distantes)', 'fogueira')}
       <div class="label">Câmera</div>
-      ${check('camBob', 'Balanço da câmera ao andar')}
-      ${check('camLead', 'Câmera antecipa o movimento e a mira')}
-      ${check('shake', 'Tremor de tela (impactos/explosões)')}
       ${check('seeThrough', 'Cenário transparente na frente do personagem')}
       <div class="label">Imagem</div>
       ${check('cinema', 'Visual cinematográfico (brilho, cor de filme, vinheta) — desligue se o jogo ficar lento')}

@@ -282,9 +282,9 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
         const m = (a + b) / 2;
         if (horiz) addPlain(b - a, ph, thick, x1 + m, ph / 2, z1, color, { jitter: 0.1 });
         else addPlain(thick, ph, b - a, x1, ph / 2, z1 + m, color, { jitter: 0.1 });
+        if (horiz) addCollider(x1+a,z1-thick/2,x1+b,z1+thick/2,ph);
+        else addCollider(x1-thick/2,z1+a,x1+thick/2,z1+b,ph);
       }
-      if (horiz) addCollider(x1 + s0, z1 - thick / 2, x1 + s1, z1 + thick / 2, h);
-      else addCollider(x1 - thick / 2, z1 + s0, x1 + thick / 2, z1 + s1, h);
     }
   }
   function rubble(cx, cz, n, spread, color = 0x5a5650) {
@@ -1276,12 +1276,13 @@ export function createWorld(scene, mapDef, seed = (Math.random() * 1e9) | 0) {
   // Altura do apoio sob os pés: topo do objeto mais alto (que já esteja abaixo dos pés)
   // sob o centro do personagem. 0 = chão. Permite pousar em carros, caixas, muretas...
   function supportHeight(x, z, rad, feetY) {
-    const r = rad * 0.55;
+    const r = rad;
     let top = 0;
     for (let k = 0; k < colliders.length; k++) {
       const b = colliders[k];
       if (b.h > feetY + 0.06 || b.h <= top) continue;
-      if (x + r < b.minX || x - r > b.maxX || z + r < b.minZ || z - r > b.maxZ) continue;
+      const dx=x-clamp(x,b.minX,b.maxX), dz=z-clamp(z,b.minZ,b.maxZ);
+      if(dx*dx+dz*dz >= r*r) continue;
       top = b.h;
     }
     return top;
